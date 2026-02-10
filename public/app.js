@@ -80,6 +80,18 @@ function updateStats() {
     document.getElementById('stat-overdue').classList.toggle('hidden', overdue === 0);
 }
 
+// View filter
+function switchView(view) {
+    currentView = view;
+    document.getElementById('view-all').className = view === 'all' 
+        ? 'px-3 py-1 text-sm rounded-md font-medium transition bg-white text-gray-900 shadow-sm'
+        : 'px-3 py-1 text-sm rounded-md font-medium transition text-gray-500 hover:text-gray-700';
+    document.getElementById('view-my').className = view === 'my'
+        ? 'px-3 py-1 text-sm rounded-md font-medium transition bg-white text-gray-900 shadow-sm'
+        : 'px-3 py-1 text-sm rounded-md font-medium transition text-gray-500 hover:text-gray-700';
+    renderBoard();
+}
+
 // Render board
 function renderBoard() {
     const board = document.getElementById('board');
@@ -87,7 +99,9 @@ function renderBoard() {
     const columns = ['Backlog', 'To Do', 'Ongoing', 'Review', 'Done'];
 
     columns.forEach(status => {
-        const colTasks = tasks.filter(t => t.status === status);
+        const allColTasks = tasks.filter(t => t.status === status);
+        const viewTasks = currentView === 'all' ? allColTasks : allColTasks.filter(t => t.assignee === 'Me' || t.assignee === 'me' || !t.assignee);
+        const colTasks = viewTasks;
         
         const colDiv = document.createElement('div');
         colDiv.className = 'flex-shrink-0 w-72';
@@ -95,7 +109,7 @@ function renderBoard() {
             <div class="bg-gray-100 rounded-xl p-3">
                 <div class="flex items-center justify-between mb-3">
                     <h2 class="font-semibold text-gray-700 text-sm uppercase tracking-wide">${status}</h2>
-                    <span class="px-2 py-0.5 bg-gray-200 text-gray-600 text-xs rounded-full font-medium">${colTasks.length}</span>
+                    <span class="px-2 py-0.5 bg-gray-200 text-gray-600 text-xs rounded-full font-medium">${viewTasks.length}</span>
                 </div>
                 <div class="space-y-2 column" data-status="${status}"></div>
             </div>
