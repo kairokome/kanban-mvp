@@ -12,6 +12,7 @@ A modern, self-hosted Kanban board with SQLite persistence, activity logging, an
 - **🏷️ Priority Labels** — High, Medium, Low with color coding
 - **📅 Due Dates** — Overdue detection and upcoming reminders
 - **👤 Assignees** — Track who owns each task
+- **🔍 My Tasks Filter** — View all tasks or just "My Tasks"
 - **📝 Activity Log** — See all changes made to tasks
 - **🔐 Single-User Auth** — Simple password protection
 - **💾 Persistent Storage** — SQLite database survives restarts
