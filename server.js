@@ -34,6 +34,7 @@ db.serialize(() => {
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
         description TEXT,
+        assignee TEXT,
         status TEXT DEFAULT 'Backlog',
         priority TEXT DEFAULT 'Medium',
         due_date TEXT,
@@ -81,23 +82,23 @@ app.get('/api/tasks', authMiddleware, (req, res) => {
 
 // Create task
 app.post('/api/tasks', authMiddleware, (req, res) => {
-    const { title, description, priority, status, due_date } = req.body;
+    const { title, description, assignee, priority, status, due_date } = req.body;
     const id = Date.now().toString(36) + Math.random().toString(36).substr(2);
     
     db.run(
-        'INSERT INTO tasks (id, title, description, priority, status, due_date) VALUES (?, ?, ?, ?, ?, ?)',
-        [id, title, description || '', priority || 'Medium', status || 'Backlog', due_date || null],
+        'INSERT INTO tasks (id, title, description, assignee, priority, status, due_date) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [id, title, description || '', assignee || '', priority || 'Medium', status || 'Backlog', due_date || null],
         function(err) {
             if (err) return res.status(500).json({ error: err.message });
             logActivity('create', id, title, `Created task "${title}"`);
-            res.json({ id, title, description, priority, status, due_date });
+            res.json({ id, title, description, assignee, priority, status, due_date });
         }
     );
 });
 
 // Update task
 app.put('/api/tasks/:id', authMiddleware, (req, res) => {
-    const { title, description, priority, status, due_date } = req.body;
+    const { title, description, assignee, priority, status, due_date } = req.body;
     const taskId = req.params.id;
     
     db.get('SELECT * FROM tasks WHERE id = ?', [taskId], (err, task) => {
@@ -105,17 +106,18 @@ app.put('/api/tasks/:id', authMiddleware, (req, res) => {
         
         const changes = [];
         if (title !== undefined && title !== task.title) changes.push(`title: "${task.title}" → "${title}"`);
+        if (assignee !== undefined && assignee !== (task.assignee || '')) changes.push(`assignee: ${task.assignee || 'none'} → ${assignee || 'none'}`);
         if (priority !== undefined && priority !== task.priority) changes.push(`priority: ${task.priority} → ${priority}`);
         if (status !== undefined && status !== task.status) changes.push(`status: ${task.status} → ${status}`);
         if (due_date !== undefined && due_date !== task.due_date) changes.push(`due_date: ${task.due_date || 'none'} → ${due_date || 'none'}`);
         
         db.run(
-            'UPDATE tasks SET title = ?, description = ?, priority = ?, status = ?, due_date = ?, updated_at = datetime("now") WHERE id = ?',
-            [title || task.title, description || task.description, priority || task.priority, status || task.status, due_date || task.due_date, taskId],
+            'UPDATE tasks SET title = ?, description = ?, assignee = ?, priority = ?, status = ?, due_date = ?, updated_at = datetime("now") WHERE id = ?',
+            [title || task.title, description || task.description, assignee || task.assignee || '', priority || task.priority, status || task.status, due_date || task.due_date, taskId],
             function(err) {
                 if (err) return res.status(500).json({ error: err.message });
                 logActivity('update', taskId, task.title, `Updated: ${changes.join(', ')}`);
-                res.json({ id: taskId, title, description, priority, status, due_date });
+                res.json({ id: taskId, title, description, assignee, priority, status, due_date });
             }
         );
     });
