@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  kanban:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - OWNER_PASSWORD=kanban123
+      - DB_PATH=/app/data/kanban.db
+    restart: unless-stopped
+
+  # Optional: Adminer for database inspection
+  adminer:
+    image: adminer
+    ports:
+      - "8080:8080"
+    restart: unless-stopped

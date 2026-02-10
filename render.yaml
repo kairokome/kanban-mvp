@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: kanban-mvp
+    env: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: OWNER_PASSWORD
+        value: kanban123
+      - key: DB_PATH
+        value: /app/data/kanban.db
+    disk:
+      name: kanban-data
+      mountPath: /app/data
+      sizeGB: 1

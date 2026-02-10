@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kanban MVP</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <div id="auth-screen">
+        <div class="auth-box">
+            <h1>🔐 Kanban MVP</h1>
+            <input type="password" id="owner-password" placeholder="Enter owner password">
+            <button onclick="authenticate()">Login</button>
+            <p id="auth-error" class="error"></p>
+        </div>
+    </div>
+
+    <div id="app-screen" class="hidden">
+        <header>
+            <h1>📋 Kanban MVP</h1>
+            <div class="stats">
+                <span id="stat-total">0 tasks</span>
+                <span id="stat-done">0 done</span>
+                <span id="stat-overdue" class="overdue">0 overdue</span>
+            </div>
+            <button onclick="showAddTask()" class="btn-primary">+ Add Task</button>
+            <button onclick="toggleActivityLog()" class="btn-secondary">📋 Activity Log</button>
+        </header>
+
+        <div class="view-tabs">
+            <button class="tab active" onclick="switchView('all')">All Tasks</button>
+            <button class="tab" onclick="switchView('my')">My Tasks</button>
+        </div>
+
+        <div class="board" id="board"></div>
+
+        <div id="reminders-section" class="hidden">
+            <h3>⏰ Upcoming Due Dates</h3>
+            <div id="reminders-list"></div>
+        </div>
+    </div>
+
+    <!-- Add/Edit Task Modal -->
+    <div id="task-modal" class="modal hidden">
+        <div class="modal-content">
+            <h2 id="modal-title">Add Task</h2>
+            <form id="task-form" onsubmit="saveTask(event)">
+                <input type="hidden" id="task-id">
+                <div class="form-group">
+                    <label>Title *</label>
+                    <input type="text" id="task-title" required>
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea id="task-desc" rows="3"></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Priority</label>
+                        <select id="task-priority">
+                            <option value="Low">Low</option>
+                            <option value="Medium" selected>Medium</option>
+                            <option value="High">High</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Due Date</label>
+                        <input type="date" id="task-due">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Status</label>
+                    <select id="task-status">
+                        <option value="Backlog">Backlog</option>
+                        <option value="To Do">To Do</option>
+                        <option value="Ongoing">Ongoing</option>
+                        <option value="Review">Review</option>
+                        <option value="Done">Done</option>
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn-primary">Save</button>
+                    <button type="button" onclick="closeModal()" class="btn-secondary">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Activity Log Modal -->
+    <div id="activity-modal" class="modal hidden">
+        <div class="modal-content">
+            <h2>📋 Activity Log</h2>
+            <div id="activity-list"></div>
+            <button onclick="toggleActivityLog()" class="btn-secondary">Close</button>
+        </div>
+    </div>
+
+    <script src="/app.js"></script>
+</body>
+</html>
