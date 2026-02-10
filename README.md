@@ -1,28 +1,27 @@
-# Kanban MVP
+# Kanban Board MVP
 
-A self-hosted Kanban board with SQLite persistence, activity logging, and reminders.
+A modern, self-hosted Kanban board with SQLite persistence, activity logging, and reminders.
 
-## Features
+![Kanban Board Screenshot](https://via.placeholder.com/800x400?text=Kanban+Board+MVP)
 
-- ✅ 5 Kanban columns (Backlog, To Do, Ongoing, Review, Done)
-- ✅ CRUD operations for tasks
-- ✅ Drag and drop between columns
-- ✅ Priority badges (High/Medium/Low)
-- ✅ Due dates with overdue detection
-- ✅ Activity log (tracks all changes)
-- ✅ In-app reminders (upcoming due dates)
-- ✅ Single-user authentication (owner password)
-- ✅ SQLite database persistence
-- ✅ Docker support
+## ✨ Features
 
-## Quick Start
+- **📋 Full Kanban Workflow** — 5 columns: Backlog, To Do, Ongoing, Review, Done
+- **🎨 Modern UI** — Clean, responsive design with Tailwind CSS
+- **🔄 Drag & Drop** — Smooth task movement between columns
+- **🏷️ Priority Labels** — High, Medium, Low with color coding
+- **📅 Due Dates** — Overdue detection and upcoming reminders
+- **👤 Assignees** — Track who owns each task
+- **📝 Activity Log** — See all changes made to tasks
+- **🔐 Single-User Auth** — Simple password protection
+- **💾 Persistent Storage** — SQLite database survives restarts
+- **📱 Mobile Friendly** — Works on phones and tablets
 
-### Option 1: Docker Compose (Recommended for Local)
+## 🚀 Quick Start
+
+### Option 1: Docker Compose (Recommended)
 
 ```bash
-# Clone or navigate to the project
-cd kanban-mvp
-
 # Start the app
 docker-compose up -d
 
@@ -30,127 +29,166 @@ docker-compose up -d
 # Default password: kanban123
 ```
 
-### Option 2: Node.js (Local Development)
+### Option 2: Node.js
 
 ```bash
-cd kanban-mvp
 npm install
 npm start
 
 # Open http://localhost:3000
-# Default password: kanban123
 ```
 
-### Option 3: Deploy to Render (Free Tier)
+### Option 3: Deploy to Render (Free)
 
-1. **Push to GitHub**
-   ```bash
-   cd kanban-mvp
-   git init
-   git add .
-   git commit -m "Initial Kanban MVP"
-   git remote add origin https://github.com/YOUR_USERNAME/kanban-mvp.git
-   git push -u origin main
-   ```
+See [Deployment Guide](#render-deployment) below.
 
-2. **Deploy to Render**
-   - Go to https://dashboard.render.com
-   - Click "New +" → "Web Service"
-   - Connect your GitHub repo
-   - Configure:
-     - Build Command: `npm ci`
-     - Start Command: `node server.js`
-     - Plan: Free
-   - Add Environment Variables:
-     - `OWNER_PASSWORD`: your-password (change from default!)
-     - `NODE_ENV`: `production`
-   - Add Disk:
-     - Name: `kanban-data`
-     - Mount Path: `/app/data`
-     - Size: 1 GB
-   - Click "Create Web Service"
+## 🔐 Authentication
 
-3. **Your Kanban URL**: `https://kanban-mvp-xxxx.onrender.com`
+Default password: `kanban123`
 
-## Data Storage
+**Change the password:**
+```bash
+OWNER_PASSWORD=your-secure-password npm start
+```
 
-| Deployment | Location |
-|------------|----------|
-| Local (Docker) | `./data/kanban.db` |
-| Local (Node.js) | `./kanban.db` |
-| Render | `/app/data/kanban.db` (persistent disk) |
-
-**Persistence verified**: Tasks survive app restarts and deploys.
-
-## Default Credentials
-
-- **Owner Password**: `kanban123` ⚠️ **Change this in production!**
-
-### Changing the Password
-
-**Docker Compose:**
+Or in Docker:
 ```yaml
 environment:
   - OWNER_PASSWORD=your-secure-password
 ```
 
-**Render:**
-- Environment Variables → OWNER_PASSWORD → your-secure-password
+## 📁 Data Storage
 
-**Node.js:**
+| Deployment | Location |
+|------------|----------|
+| Docker | `./data/kanban.db` |
+| Node.js local | `./kanban.db` |
+| Render | `/app/data/kanban.db` |
+
+**Persistence verified** ✅ — Tasks survive app restarts.
+
+## 🎯 Usage Guide
+
+### Creating Tasks
+
+1. Click **+ Add Task**
+2. Enter title (required)
+3. Optionally add description, assignee, priority, and due date
+4. Click **Save Task**
+
+### Managing Tasks
+
+- **Drag & Drop** — Move cards between columns
+- **Edit** — Click the pencil icon to modify any field
+- **Delete** — Click the trash icon to remove a task
+- **Priority** — Color-coded badges (🔴 High, 🟡 Medium, 🟢 Low)
+- **Due Dates** — Shown on cards; overdue items highlighted red
+
+### Activity Log
+
+Click the 📋 icon in the header to view:
+- Task creations
+- Status changes
+- Field updates
+- Deletions
+
+## 📱 Mobile Use
+
+The board is fully responsive:
+- Horizontal scrolling on phone
+- Touch-friendly drag & drop
+- Optimized card layout
+
+## 🛠️ Tech Stack
+
+| Layer | Technology |
+|-------|------------|
+| Backend | Express.js |
+| Database | SQLite3 |
+| Frontend | Vanilla JS + Tailwind CSS |
+| Deployment | Docker, Render (free tier) |
+
+## 🔧 API Reference
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/tasks` | Get all tasks |
+| POST | `/api/tasks` | Create task |
+| PUT | `/api/tasks/:id` | Update task |
+| DELETE | `/api/tasks/:id` | Delete task |
+| GET | `/api/activity` | Activity log |
+| GET | `/api/reminders` | Upcoming tasks |
+| GET | `/api/stats` | Task statistics |
+
+**Auth Header:** `x-owner-password: YOUR_PASSWORD`
+
+## 🎨 Customization
+
+### Change Colors
+
+Edit `public/index.html` and modify Tailwind classes.
+
+### Add Columns
+
+1. Update `COLUMNS` array in `public/app.js`
+2. Add new column in `server.js` if needed
+
+## 📦 Render Deployment
+
+### Step 1: Push to GitHub
+
 ```bash
-OWNER_PASSWORD=your-secure-password npm start
+cd kanban-mvp
+git remote add origin https://github.com/YOUR_USERNAME/kanban-mvp.git
+git push -u origin main
 ```
 
-## API Endpoints
+### Step 2: Create Render Service
 
-| Method | Endpoint | Auth Required | Description |
-|--------|----------|---------------|-------------|
-| GET | `/api/tasks` | Yes | Get all tasks |
-| POST | `/api/tasks` | Yes | Create task |
-| PUT | `/api/tasks/:id` | Yes | Update task |
-| DELETE | `/api/tasks/:id` | Yes | Delete task |
-| GET | `/api/activity` | Yes | Get activity log |
-| GET | `/api/reminders` | Yes | Get upcoming tasks |
-| GET | `/api/stats` | Yes | Get task statistics |
-| GET | `/health` | No | Health check |
+1. Go to [Render Dashboard](https://dashboard.render.com)
+2. Click **New +** → **Web Service**
+3. Connect your GitHub repo
+4. Configure:
+   - **Build Command:** `npm ci`
+   - **Start Command:** `node server.js`
+   - **Plan:** Free
 
-**Auth Header**: `x-owner-password: YOUR_PASSWORD`
+### Step 3: Environment Variables
 
-## Demo Checklist
+Add in Render dashboard:
+- `OWNER_PASSWORD` → your password
+- `NODE_ENV` → `production`
 
-After deployment, verify these features:
+### Step 4: Persistent Disk
 
-- [ ] Login screen appears with password prompt
-- [ ] Can create a new task (click "+ Add Task")
-- [ ] Task appears in "Backlog" column
-- [ ] Can drag task to "To Do" column
-- [ ] Priority badge displays correctly (High/Medium/Low)
-- [ ] Can edit task (click "Edit" button)
-- [ ] Can delete task (click "Delete" button)
-- [ ] Due date appears on task card
-- [ ] Overdue tasks show red highlight
-- [ ] Activity Log shows all changes
-- [ ] Stats show correct counts (total, done, overdue)
-- [ ] Page refresh preserves all data
-- [ ] Restart app → data persists
+1. Scroll to **Disks** section
+2. Click **Add Disk**
+3. Configure:
+   - **Name:** `kanban-data`
+   - **Mount Path:** `/app/data`
+   - **Size:** 1 GB
+4. Click **Create**
 
-## Limitations
+### Step 5: Deploy
 
-- Single-user only (owner password, no multiple accounts)
-- No task comments or attachments
-- No subtasks
-- No search/filter (use browser find)
-- No export/import
-- No email notifications (in-app only)
-- Free tier has limits (Render: 750 hours/month, 15GB bandwidth)
+Click **Create Web Service**. After build completes, your Kanban board will be live at:
+```
+https://kanban-mvp-xxxx.onrender.com
+```
 
-## Tech Stack
+## 🔒 Security Notes
 
-- **Backend**: Express.js, SQLite3
-- **Frontend**: Vanilla HTML/CSS/JS
-- **Deployment**: Docker, Render (free tier)
+- Single-user auth only (no multi-user support)
+- Password transmitted in headers (use HTTPS in production)
+- No encrypted storage (SQLite is plaintext)
 
-## License
+## 📄 License
 
-MIT
+MIT — Feel free to modify and use.
+
+## 🙏 Credits
+
+Built with:
+- [Tailwind CSS](https://tailwindcss.com)
+- [Express.js](https://expressjs.com)
+- [SQLite](https://www.sqlite.org)
