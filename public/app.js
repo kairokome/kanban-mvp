@@ -2,6 +2,8 @@ const API_URL = '';
 let tasks = [];
 let currentView = 'all';
 let isOwner = false;
+let isSaving = false;
+let saveTimeout = null;
 
 // Set current date in header
 document.getElementById('current-date').textContent = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
@@ -213,6 +215,7 @@ function moveTask(taskId, newStatus) {
 
 // Add/Edit Task
 function showAddTask() {
+    resetFormState();
     document.getElementById('modal-title').textContent = 'Add Task';
     document.getElementById('task-form').reset();
     document.getElementById('task-id').value = '';
@@ -222,7 +225,8 @@ function showAddTask() {
 function editTask(id) {
     const task = tasks.find(t => t.id === id);
     if (!task) return;
-
+    
+    resetFormState();
     document.getElementById('modal-title').textContent = 'Edit Task';
     document.getElementById('task-id').value = task.id;
     document.getElementById('task-title').value = task.title;
@@ -238,12 +242,24 @@ function saveTask(e) {
     e.preventDefault();
     e.stopPropagation();
     
+    // Prevent double-submit
+    if (isSaving) {
+        console.log('Already saving, ignored');
+        return false;
+    }
+    
+    isSaving = true;
+    
     const btn = document.getElementById('save-btn');
     const originalText = btn.textContent;
     btn.textContent = 'Saving...';
     btn.disabled = true;
     
-    console.log('SaveTask called');
+    // Disable all form inputs
+    const inputs = document.querySelectorAll('#task-form input, #task-form select, #task-form textarea');
+    inputs.forEach(input => input.disabled = true);
+    
+    console.log('SaveTask called, isSaving=true');
     
     const id = document.getElementById('task-id').value;
     const taskData = {
@@ -259,13 +275,19 @@ function saveTask(e) {
     
     if (!taskData.title) {
         alert('Title is required');
-        btn.textContent = originalText;
-        btn.disabled = false;
+        resetFormState();
         return false;
     }
     
     const method = id ? 'PUT' : 'POST';
     const endpoint = id ? `/api/tasks/${id}` : '/api/tasks';
+    
+    // 10-second timeout as escape hatch
+    saveTimeout = setTimeout(() => {
+        console.error('Save timeout after 10s');
+        alert('Save timed out. Please try again.');
+        resetFormState();
+    }, 10000);
     
     api(endpoint, method, taskData)
     .then(res => {
@@ -277,6 +299,10 @@ function saveTask(e) {
     })
     .then(data => {
         console.log('Success:', data);
+        if (saveTimeout) {
+            clearTimeout(saveTimeout);
+            saveTimeout = null;
+        }
         closeModal();
         loadTasks();
         loadReminders();
@@ -287,8 +313,12 @@ function saveTask(e) {
         alert('Error saving task: ' + err.message);
     })
     .finally(() => {
-        btn.textContent = originalText;
-        btn.disabled = false;
+        if (saveTimeout) {
+            clearTimeout(saveTimeout);
+            saveTimeout = null;
+        }
+        isSaving = false;
+        resetFormState();
     });
     
     return false;
@@ -304,10 +334,31 @@ function deleteTask(id) {
 }
 
 function closeModal() {
+    resetFormState();
     document.getElementById('task-modal').classList.add('hidden');
     document.getElementById('activity-modal').classList.add('hidden');
     document.getElementById('task-form').reset();
     document.getElementById('task-id').value = '';
+    
+    // Clear any pending save timeout
+    if (saveTimeout) {
+        clearTimeout(saveTimeout);
+        saveTimeout = null;
+    }
+}
+
+// Reset all form input states
+function resetFormState() {
+    isSaving = false;
+    const btn = document.getElementById('save-btn');
+    if (btn) {
+        btn.textContent = 'Save Task';
+        btn.disabled = false;
+    }
+    // Disable/enable all form inputs
+    const inputs = document.querySelectorAll('#task-form input, #task-form select, #task-form textarea');
+    inputs.forEach(input => input.disabled = false);
+}
 }
 
 // Activity Log
