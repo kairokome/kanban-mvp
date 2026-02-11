@@ -1,7 +1,6 @@
 const API_URL = '';
 let tasks = [];
 let currentView = 'all';
-let isOwner = false;
 let isSaving = false;
 let saveTimeout = null;
 let authTimeout = null;
@@ -9,28 +8,71 @@ let authTimeout = null;
 // Set current date in header
 document.getElementById('current-date').textContent = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
 
-// Auth with loading state and timeout
-function authenticate() {
+// Centralized API fetch with auth header
+function apiFetch(url, options = {}) {
+    const password = localStorage.getItem('ownerPassword') || '';
+    return fetch(url, {
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            'x-owner-password': password,
+            ...(options.headers || {})
+        }
+    });
+}
+
+// Test if password is valid
+async function testAuth() {
+    try {
+        const res = await apiFetch('/api/tasks');
+        return res.ok;
+    } catch {
+        return false;
+    }
+}
+
+// Show auth error
+function showAuthError(msg) {
+    const err = document.getElementById('auth-error');
+    err.textContent = msg;
+    err.classList.remove('hidden');
+}
+
+// Hide auth error
+function hideAuthError() {
+    const err = document.getElementById('auth-error');
+    err.classList.add('hidden');
+}
+
+// Authenticate
+async function authenticate() {
     const password = document.getElementById('owner-password').value;
     const btn = document.querySelector('#auth-screen button');
     const originalText = btn.textContent;
+    
+    console.log('Authenticate called');
+    hideAuthError();
+    
+    if (!password) {
+        showAuthError('Please enter a password');
+        return;
+    }
+    
+    // Show loading state
     btn.textContent = 'Signing in...';
     btn.disabled = true;
     
-    console.log('Authenticate called');
-    
-    // 10-second timeout
+    // Set timeout
     authTimeout = setTimeout(() => {
-        console.error('Auth timeout');
         btn.textContent = originalText;
         btn.disabled = false;
         showAuthError('Connection timeout. Please try again.');
     }, 10000);
     
-    fetch(API_URL + '/api/tasks', {
-        headers: { 'x-owner-password': password }
-    })
-    .then(res => {
+    try {
+        // Test password against protected endpoint
+        const res = await apiFetch('/api/tasks');
+        
         if (authTimeout) {
             clearTimeout(authTimeout);
             authTimeout = null;
@@ -39,19 +81,20 @@ function authenticate() {
         console.log('Auth response status:', res.status);
         
         if (res.ok) {
-            isOwner = true;
-            localStorage.setItem('owner_password', password);
+            // Password valid - proceed
+            localStorage.setItem('ownerPassword', password);
             document.getElementById('auth-screen').classList.add('hidden');
             document.getElementById('app-screen').classList.remove('hidden');
             loadTasks();
             loadReminders();
         } else {
+            // Password invalid
             btn.textContent = originalText;
             btn.disabled = false;
-            showAuthError('Invalid password');
+            showAuthError('Incorrect password');
+            localStorage.removeItem('ownerPassword');
         }
-    })
-    .catch(err => {
+    } catch (err) {
         if (authTimeout) {
             clearTimeout(authTimeout);
             authTimeout = null;
@@ -60,51 +103,65 @@ function authenticate() {
         btn.disabled = false;
         console.error('Auth error:', err);
         showAuthError('Connection error. Is the server running?');
-    });
-}
-
-function showAuthError(msg) {
-    const err = document.getElementById('auth-error');
-    err.textContent = msg;
-    err.classList.remove('hidden');
-}
-            document.getElementById('auth-error').textContent = 'Invalid password';
-            document.getElementById('auth-error').classList.remove('hidden');
-        }
-    })
-    .catch(() => {
-        document.getElementById('auth-error').textContent = 'Connection error';
-        document.getElementById('auth-error').classList.remove('hidden');
-    });
-}
-
-// Load password from storage
-document.addEventListener('DOMContentLoaded', () => {
-    const savedPassword = localStorage.getItem('owner_password');
-    if (savedPassword) {
-        document.getElementById('owner-password').value = savedPassword;
-        authenticate();
     }
-});
+}
 
-// API helper
-function api(endpoint, method = 'GET', body = null) {
-    const options = {
-        method,
-        headers: { 
-            'Content-Type': 'application/json',
-            'x-owner-password': localStorage.getItem('owner_password') || ''
+// Check stored password on page load
+async function checkStoredAuth() {
+    const storedPassword = localStorage.getItem('ownerPassword');
+    if (!storedPassword) return false;
+    
+    console.log('Testing stored password...');
+    
+    // Set timeout
+    authTimeout = setTimeout(() => {
+        console.log('Auth check timeout');
+        localStorage.removeItem('ownerPassword');
+        return false;
+    }, 10000);
+    
+    try {
+        const res = await apiFetch('/api/tasks');
+        
+        if (authTimeout) {
+            clearTimeout(authTimeout);
+            authTimeout = null;
         }
-    };
-    if (body) options.body = JSON.stringify(body);
-    return fetch(API_URL + endpoint, options);
+        
+        if (res.ok) {
+            console.log('Stored password valid');
+            document.getElementById('owner-password').value = storedPassword;
+            document.getElementById('auth-screen').classList.add('hidden');
+            document.getElementById('app-screen').classList.remove('hidden');
+            loadTasks();
+            loadReminders();
+            return true;
+        } else {
+            console.log('Stored password invalid');
+            localStorage.removeItem('ownerPassword');
+            return false;
+        }
+    } catch (err) {
+        if (authTimeout) {
+            clearTimeout(authTimeout);
+            authTimeout = null;
+        }
+        console.error('Auth check failed:', err);
+        localStorage.removeItem('ownerPassword');
+        return false;
+    }
 }
 
 // Load tasks
 function loadTasks() {
-    api('/api/tasks')
+    apiFetch('/api/tasks')
     .then(res => {
         if (!res.ok) {
+            if (res.status === 401) {
+                // Unauthorized - force logout
+                logout();
+                return [];
+            }
             throw new Error(`HTTP ${res.status}`);
         }
         return res.json();
@@ -118,6 +175,18 @@ function loadTasks() {
         console.error('Error loading tasks:', err);
         showNotification('Error loading tasks: ' + err.message);
     });
+}
+
+// Force logout
+function logout() {
+    localStorage.removeItem('ownerPassword');
+    document.getElementById('auth-screen').classList.remove('hidden');
+    document.getElementById('app-screen').classList.add('hidden');
+    document.getElementById('owner-password').value = '';
+    hideAuthError();
+    tasks = [];
+    updateStats();
+    renderBoard();
 }
 
 // Update stats
@@ -157,7 +226,7 @@ function renderBoard() {
         const allColTasks = tasks.filter(t => t.status === status);
         const viewTasks = currentView === 'all' ? allColTasks : allColTasks.filter(t => t.assignee === 'Me' || t.assignee === 'me' || !t.assignee);
         const colTasks = viewTasks;
-        
+
         const colDiv = document.createElement('div');
         colDiv.className = 'flex-shrink-0 w-72';
         colDiv.innerHTML = `
@@ -260,9 +329,23 @@ function moveTask(taskId, newStatus) {
     const task = tasks.find(t => t.id === taskId);
     if (!task || task.status === newStatus) return;
 
-    api(`/api/tasks/${taskId}`, 'PUT', { status: newStatus })
-    .then(() => {
+    apiFetch(`/api/tasks/${taskId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ status: newStatus })
+    })
+    .then(res => {
+        if (!res.ok) {
+            if (res.status === 401) {
+                logout();
+                return;
+            }
+            throw new Error('Failed to move task');
+        }
         loadTasks();
+    })
+    .catch(err => {
+        console.error('Move task error:', err);
+        showNotification('Error moving task');
     });
 }
 
@@ -324,8 +407,6 @@ function saveTask(e) {
         due_date: document.getElementById('task-due').value || null
     };
     
-    console.log('Task data:', taskData);
-    
     if (!taskData.title) {
         alert('Title is required');
         resetFormState();
@@ -342,24 +423,34 @@ function saveTask(e) {
         resetFormState();
     }, 10000);
     
-    api(endpoint, method, taskData)
+    apiFetch(endpoint, {
+        method,
+        body: JSON.stringify(taskData)
+    })
     .then(res => {
-        console.log('Response status:', res.status);
+        if (saveTimeout) {
+            clearTimeout(saveTimeout);
+            saveTimeout = null;
+        }
+        
+        if (res.status === 401) {
+            logout();
+            return;
+        }
+        
         if (!res.ok) {
             throw new Error(`HTTP ${res.status}`);
         }
         return res.json();
     })
     .then(data => {
-        console.log('Success:', data);
-        if (saveTimeout) {
-            clearTimeout(saveTimeout);
-            saveTimeout = null;
+        if (data) {
+            console.log('Success:', data);
+            closeModal();
+            loadTasks();
+            loadReminders();
+            showNotification('Task saved!');
         }
-        closeModal();
-        loadTasks();
-        loadReminders();
-        showNotification('Task saved!');
     })
     .catch(err => {
         console.error('Error:', err);
@@ -379,10 +470,22 @@ function saveTask(e) {
 
 function deleteTask(id) {
     if (!confirm('Delete this task?')) return;
-    api(`/api/tasks/${id}`, 'DELETE')
-    .then(() => {
+    
+    apiFetch(`/api/tasks/${id}`, { method: 'DELETE' })
+    .then(res => {
+        if (res.status === 401) {
+            logout();
+            return;
+        }
+        if (!res.ok) {
+            throw new Error('Failed to delete');
+        }
         loadTasks();
         loadReminders();
+    })
+    .catch(err => {
+        console.error('Delete error:', err);
+        showNotification('Error deleting task');
     });
 }
 
@@ -412,7 +515,6 @@ function resetFormState() {
     const inputs = document.querySelectorAll('#task-form input, #task-form select, #task-form textarea');
     inputs.forEach(input => input.disabled = false);
 }
-}
 
 // Activity Log
 function toggleActivityLog() {
@@ -426,8 +528,15 @@ function toggleActivityLog() {
 }
 
 function loadActivityLog() {
-    api('/api/activity?limit=100')
-    .then(res => res.json())
+    apiFetch('/api/activity?limit=100')
+    .then(res => {
+        if (res.status === 401) {
+            logout();
+            return [];
+        }
+        if (!res.ok) throw new Error('Failed to load activity');
+        return res.json();
+    })
     .then(logs => {
         const list = document.getElementById('activity-list');
         if (logs.length === 0) {
@@ -447,13 +556,23 @@ function loadActivityLog() {
                 </div>
             </div>
         `).join('');
+    })
+    .catch(err => {
+        console.error('Activity log error:', err);
     });
 }
 
 // Reminders
 function loadReminders() {
-    api('/api/reminders')
-    .then(res => res.json())
+    apiFetch('/api/reminders')
+    .then(res => {
+        if (res.status === 401) {
+            logout();
+            return [];
+        }
+        if (!res.ok) throw new Error('Failed to load reminders');
+        return res.json();
+    })
     .then(reminders => {
         const section = document.getElementById('reminders-bar');
         const list = document.getElementById('reminders-list');
@@ -463,7 +582,7 @@ function loadReminders() {
             const due = new Date(t.due_date);
             const now = new Date();
             const daysUntil = (due - now) / (1000 * 60 * 60 * 24);
-            return daysUntil <= 7; // Within 7 days
+            return daysUntil <= 7;
         });
 
         if (upcoming.length === 0) {
@@ -481,6 +600,9 @@ function loadReminders() {
                 </div>
             `;
         }).join('');
+    })
+    .catch(err => {
+        console.error('Reminders error:', err);
     });
 }
 
@@ -518,17 +640,7 @@ function displayVersion() {
     footer.textContent = `v${version} · ${commit} · ${formattedDate}`;
 }
 
-// Initial load
-document.addEventListener('DOMContentLoaded', () => {
-    if (localStorage.getItem('owner_password')) {
-        authenticate();
-    }
-    displayVersion();
-    // Auto-check health (silent)
-    checkHealth();
-});
-
-// Health check (call from console: checkHealth())
+// Health check
 function checkHealth() {
     fetch(API_URL + '/health')
     .then(res => res.json())
@@ -539,3 +651,10 @@ function checkHealth() {
         console.error('Health check FAILED:', err);
     });
 }
+
+// Initial load
+document.addEventListener('DOMContentLoaded', () => {
+    checkStoredAuth();
+    displayVersion();
+    checkHealth();
+});
