@@ -2,8 +2,6 @@
 
 A modern, self-hosted Kanban board with SQLite persistence, activity logging, and reminders.
 
-![Kanban Board Screenshot](https://via.placeholder.com/800x400?text=Kanban+Board+MVP)
-
 ## ✨ Features
 
 - **📋 Full Kanban Workflow** — 5 columns: Backlog, To Do, Ongoing, Review, Done

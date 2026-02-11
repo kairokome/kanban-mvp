@@ -4,17 +4,40 @@ let currentView = 'all';
 let isOwner = false;
 let isSaving = false;
 let saveTimeout = null;
+let authTimeout = null;
 
 // Set current date in header
 document.getElementById('current-date').textContent = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
 
-// Auth
+// Auth with loading state and timeout
 function authenticate() {
     const password = document.getElementById('owner-password').value;
+    const btn = document.querySelector('#auth-screen button');
+    const originalText = btn.textContent;
+    btn.textContent = 'Signing in...';
+    btn.disabled = true;
+    
+    console.log('Authenticate called');
+    
+    // 10-second timeout
+    authTimeout = setTimeout(() => {
+        console.error('Auth timeout');
+        btn.textContent = originalText;
+        btn.disabled = false;
+        showAuthError('Connection timeout. Please try again.');
+    }, 10000);
+    
     fetch(API_URL + '/api/tasks', {
         headers: { 'x-owner-password': password }
     })
     .then(res => {
+        if (authTimeout) {
+            clearTimeout(authTimeout);
+            authTimeout = null;
+        }
+        
+        console.log('Auth response status:', res.status);
+        
         if (res.ok) {
             isOwner = true;
             localStorage.setItem('owner_password', password);
@@ -23,6 +46,28 @@ function authenticate() {
             loadTasks();
             loadReminders();
         } else {
+            btn.textContent = originalText;
+            btn.disabled = false;
+            showAuthError('Invalid password');
+        }
+    })
+    .catch(err => {
+        if (authTimeout) {
+            clearTimeout(authTimeout);
+            authTimeout = null;
+        }
+        btn.textContent = originalText;
+        btn.disabled = false;
+        console.error('Auth error:', err);
+        showAuthError('Connection error. Is the server running?');
+    });
+}
+
+function showAuthError(msg) {
+    const err = document.getElementById('auth-error');
+    err.textContent = msg;
+    err.classList.remove('hidden');
+}
             document.getElementById('auth-error').textContent = 'Invalid password';
             document.getElementById('auth-error').classList.remove('hidden');
         }
@@ -58,13 +103,21 @@ function api(endpoint, method = 'GET', body = null) {
 // Load tasks
 function loadTasks() {
     api('/api/tasks')
-    .then(res => res.json())
+    .then(res => {
+        if (!res.ok) {
+            throw new Error(`HTTP ${res.status}`);
+        }
+        return res.json();
+    })
     .then(data => {
         tasks = data;
         updateStats();
         renderBoard();
     })
-    .catch(err => console.error('Error loading tasks:', err));
+    .catch(err => {
+        console.error('Error loading tasks:', err);
+        showNotification('Error loading tasks: ' + err.message);
+    });
 }
 
 // Update stats
@@ -471,4 +524,18 @@ document.addEventListener('DOMContentLoaded', () => {
         authenticate();
     }
     displayVersion();
+    // Auto-check health (silent)
+    checkHealth();
 });
+
+// Health check (call from console: checkHealth())
+function checkHealth() {
+    fetch(API_URL + '/health')
+    .then(res => res.json())
+    .then(data => {
+        console.log('Health check OK:', data);
+    })
+    .catch(err => {
+        console.error('Health check FAILED:', err);
+    });
+}

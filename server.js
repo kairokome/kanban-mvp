@@ -173,6 +173,14 @@ app.get('/api/stats', authMiddleware, (req, res) => {
 // Health check
 app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
+// Health check (no auth required)
+app.get('/health', (req, res) => res.json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+}));
+
+// Start server
 app.listen(PORT, () => {
     console.log(`🚀 Kanban MVP running on http://localhost:${PORT}`);
     console.log(`📁 Database: ${DB_PATH}`);
