@@ -236,7 +236,9 @@ function editTask(id) {
 
 function saveTask(e) {
     e.preventDefault();
+    console.log('Save button clicked');
     const id = document.getElementById('task-id').value;
+    console.log('Task ID:', id);
     const taskData = {
         title: document.getElementById('task-title').value.trim(),
         description: document.getElementById('task-desc').value.trim(),
@@ -245,17 +247,31 @@ function saveTask(e) {
         status: document.getElementById('task-status').value,
         due_date: document.getElementById('task-due').value || null
     };
+    console.log('Task data:', taskData);
 
     const method = id ? 'PUT' : 'POST';
     const endpoint = id ? `/api/tasks/${id}` : '/api/tasks';
+    console.log('API call:', method, endpoint);
 
     api(endpoint, method, taskData)
-    .then(() => {
+    .then(res => {
+        console.log('API response status:', res.status);
+        if (!res.ok) {
+            throw new Error(`API error: ${res.status}`);
+        }
+        return res.json();
+    })
+    .then(data => {
+        console.log('Task saved successfully:', data);
         closeModal();
         loadTasks();
         loadReminders();
+        showNotification('Task saved successfully!');
     })
-    .catch(err => console.error('Error saving task:', err));
+    .catch(err => {
+        console.error('Error saving task:', err);
+        alert('Error saving task: ' + err.message);
+    });
 }
 
 function deleteTask(id) {
@@ -348,6 +364,15 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+// Notification
+function showNotification(message) {
+    const notif = document.createElement('div');
+    notif.className = 'fixed bottom-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+    notif.textContent = message;
+    document.body.appendChild(notif);
+    setTimeout(() => notif.remove(), 3000);
 }
 
 // Initial load
