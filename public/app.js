@@ -238,15 +238,13 @@ function renderBoard() {
         const colTasks = viewTasks;
 
         const colDiv = document.createElement('div');
-        colDiv.className = 'flex-shrink-0 w-72 h-full';
+        colDiv.className = 'kanban-column rounded-xl p-3 flex flex-col h-full';
         colDiv.innerHTML = `
-            <div class="kanban-column rounded-xl p-3 h-full flex flex-col">
-                <div class="flex items-center justify-between mb-3 flex-shrink-0">
-                    <h2 class="font-semibold text-gray-700 text-sm uppercase tracking-wide flex items-center gap-1.5">${col.emoji} ${col.id}</h2>
-                    <span class="px-2 py-0.5 bg-white/50 text-gray-600 text-xs rounded-full font-medium">${viewTasks.length}</span>
-                </div>
-                <div class="space-y-2 column flex-1 overflow-y-auto" data-status="${col.id}"></div>
+            <div class="flex items-center justify-between mb-3 flex-shrink-0">
+                <h2 class="font-semibold text-gray-700 text-sm uppercase tracking-wide flex items-center gap-1.5">${col.emoji} ${col.id}</h2>
+                <span class="px-2 py-0.5 bg-white/50 text-gray-600 text-xs rounded-full font-medium">${viewTasks.length}</span>
             </div>
+            <div class="space-y-2 column flex-1 overflow-y-auto" data-status="${col.id}"></div>
         `;
 
         const taskList = colDiv.querySelector('.column');
