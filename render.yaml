@@ -1,5 +1,5 @@
 services:
-  - type: web
+  - type: web_service
     name: kanban-mvp
     env: node
     plan: free

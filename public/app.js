@@ -375,9 +375,27 @@ function showNotification(message) {
     setTimeout(() => notif.remove(), 3000);
 }
 
+// Version info
+function displayVersion() {
+    const footer = document.getElementById('app-version');
+    const version = '0.1.0';
+    const commit = document.body.getAttribute('data-commit') || 'local';
+    const deployTime = document.body.getAttribute('data-deploy-time') || new Date().toISOString();
+    
+    const formattedDate = new Date(deployTime).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+    
+    footer.textContent = `v${version} · ${commit} · ${formattedDate}`;
+}
+
 // Initial load
 document.addEventListener('DOMContentLoaded', () => {
     if (localStorage.getItem('owner_password')) {
         authenticate();
     }
+    displayVersion();
 });
