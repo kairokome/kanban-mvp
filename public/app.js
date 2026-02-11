@@ -236,9 +236,16 @@ function editTask(id) {
 
 function saveTask(e) {
     e.preventDefault();
-    console.log('Save button clicked');
+    e.stopPropagation();
+    
+    const btn = document.getElementById('save-btn');
+    const originalText = btn.textContent;
+    btn.textContent = 'Saving...';
+    btn.disabled = true;
+    
+    console.log('SaveTask called');
+    
     const id = document.getElementById('task-id').value;
-    console.log('Task ID:', id);
     const taskData = {
         title: document.getElementById('task-title').value.trim(),
         description: document.getElementById('task-desc').value.trim(),
@@ -247,31 +254,44 @@ function saveTask(e) {
         status: document.getElementById('task-status').value,
         due_date: document.getElementById('task-due').value || null
     };
+    
     console.log('Task data:', taskData);
-
+    
+    if (!taskData.title) {
+        alert('Title is required');
+        btn.textContent = originalText;
+        btn.disabled = false;
+        return false;
+    }
+    
     const method = id ? 'PUT' : 'POST';
     const endpoint = id ? `/api/tasks/${id}` : '/api/tasks';
-    console.log('API call:', method, endpoint);
-
+    
     api(endpoint, method, taskData)
     .then(res => {
-        console.log('API response status:', res.status);
+        console.log('Response status:', res.status);
         if (!res.ok) {
-            throw new Error(`API error: ${res.status}`);
+            throw new Error(`HTTP ${res.status}`);
         }
         return res.json();
     })
     .then(data => {
-        console.log('Task saved successfully:', data);
+        console.log('Success:', data);
         closeModal();
         loadTasks();
         loadReminders();
-        showNotification('Task saved successfully!');
+        showNotification('Task saved!');
     })
     .catch(err => {
-        console.error('Error saving task:', err);
+        console.error('Error:', err);
         alert('Error saving task: ' + err.message);
+    })
+    .finally(() => {
+        btn.textContent = originalText;
+        btn.disabled = false;
     });
+    
+    return false;
 }
 
 function deleteTask(id) {
@@ -286,6 +306,8 @@ function deleteTask(id) {
 function closeModal() {
     document.getElementById('task-modal').classList.add('hidden');
     document.getElementById('activity-modal').classList.add('hidden');
+    document.getElementById('task-form').reset();
+    document.getElementById('task-id').value = '';
 }
 
 // Activity Log

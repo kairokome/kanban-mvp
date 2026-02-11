@@ -111,53 +111,55 @@
     </div>
 
     <!-- Task Modal -->
-    <div id="task-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-        <div class="bg-white rounded-xl shadow-xl w-full max-w-lg">
-            <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-                <h2 id="modal-title" class="text-lg font-semibold text-gray-900">Add Task</h2>
-                <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600 transition">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                    </svg>
-                </button>
-            </div>
-            <form id="task-form" onsubmit="saveTask(event)" class="p-6 space-y-4">
+    <div id="task-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-40 p-4">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-lg relative">
+            <form id="task-form" onsubmit="return saveTask(event)">
                 <input type="hidden" id="task-id">
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Title *</label>
-                    <input type="text" id="task-title" required class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+                <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                    <h2 id="modal-title" class="text-lg font-semibold text-gray-900">Add Task</h2>
+                    <button type="button" onclick="closeModal()" class="text-gray-400 hover:text-gray-600 transition">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
                 </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                    <textarea id="task-desc" rows="3" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"></textarea>
-                </div>
-                <div class="grid grid-cols-2 gap-4">
+                <div class="p-6 space-y-4">
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Assignee</label>
-                        <input type="text" id="task-assignee" placeholder="Me" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Title *</label>
+                        <input type="text" id="task-title" required class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Priority</label>
-                        <select id="task-priority" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white">
-                            <option value="Low">Low</option>
-                            <option value="Medium" selected>Medium</option>
-                            <option value="High">High</option>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                        <textarea id="task-desc" rows="3" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"></textarea>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Assignee</label>
+                            <input type="text" id="task-assignee" placeholder="Me" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+                            <select id="task-priority" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white">
+                                <option value="Low">Low</option>
+                                <option value="Medium" selected>Medium</option>
+                                <option value="High">High</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                        <select id="task-status" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white">
+                            <option value="Backlog">Backlog</option>
+                            <option value="To Do">To Do</option>
+                            <option value="Ongoing">Ongoing</option>
+                            <option value="Review">Review</option>
+                            <option value="Done">Done</option>
                         </select>
                     </div>
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                    <select id="task-status" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white">
-                        <option value="Backlog">Backlog</option>
-                        <option value="To Do">To Do</option>
-                        <option value="Ongoing">Ongoing</option>
-                        <option value="Review">Review</option>
-                        <option value="Done">Done</option>
-                    </select>
-                </div>
-                <div class="flex gap-3 pt-2">
-                    <button type="submit" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg transition">Save Task</button>
-                    <button type="button" onclick="closeModal()" class="px-6 py-2.5 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50 transition">Cancel</button>
+                    <div class="flex gap-3 pt-2">
+                        <button type="submit" id="save-btn" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg transition">Save Task</button>
+                        <button type="button" onclick="closeModal()" class="px-6 py-2.5 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50 transition">Cancel</button>
+                    </div>
                 </div>
             </form>
         </div>
