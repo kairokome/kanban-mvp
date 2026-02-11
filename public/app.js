@@ -44,13 +44,13 @@ function hideAuthError() {
     err.classList.add('hidden');
 }
 
-// Authenticate
+// Authenticate - use typed password directly, only save on success
 async function authenticate() {
-    const password = document.getElementById('owner-password').value;
+    const password = document.getElementById('owner-password').value.trim();
     const btn = document.querySelector('#auth-screen button');
     const originalText = btn.textContent;
     
-    console.log('Authenticate called');
+    console.log('Authenticate called with password:', password ? '***' : '(empty)');
     hideAuthError();
     
     if (!password) {
@@ -70,8 +70,13 @@ async function authenticate() {
     }, 10000);
     
     try {
-        // Test password against protected endpoint
-        const res = await apiFetch('/api/tasks');
+        // Test password with DIRECT fetch (not apiFetch, which uses empty localStorage)
+        const res = await fetch('/api/tasks', {
+            headers: {
+                'Content-Type': 'application/json',
+                'x-owner-password': password
+            }
+        });
         
         if (authTimeout) {
             clearTimeout(authTimeout);
@@ -81,18 +86,17 @@ async function authenticate() {
         console.log('Auth response status:', res.status);
         
         if (res.ok) {
-            // Password valid - proceed
+            // Password valid - save and proceed
             localStorage.setItem('ownerPassword', password);
             document.getElementById('auth-screen').classList.add('hidden');
             document.getElementById('app-screen').classList.remove('hidden');
             loadTasks();
             loadReminders();
         } else {
-            // Password invalid
+            // Password invalid - don't clear stored password, just show error
             btn.textContent = originalText;
             btn.disabled = false;
             showAuthError('Incorrect password');
-            localStorage.removeItem('ownerPassword');
         }
     } catch (err) {
         if (authTimeout) {
