@@ -294,8 +294,8 @@ function createTaskCard(task) {
             <h3 class="font-medium text-gray-900 text-sm leading-tight">${escapeHtml(task.title)}</h3>
             <span class="${priorityColors[task.priority] || 'bg-gray-100 text-gray-600'} text-xs px-2 py-0.5 rounded font-medium flex-shrink-0">${task.priority}</span>
         </div>
-        ${task.description ? `<p class="text-xs text-gray-500 mb-2 line-clamp-2">${escapeHtml(task.description)}</p>` : ''}
-        <div class="flex items-center justify-between text-xs mt-2 pt-2 border-t border-gray-100">
+        ${task.description ? `<p class="text-xs text-gray-500 mb-2">${escapeHtml(task.description)}</p>` : ''}
+        <div class="flex items-center justify-between text-xs mt-auto pt-2 border-t border-gray-100 flex-shrink-0">
             <span class="flex items-center gap-1 text-gray-500">
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
