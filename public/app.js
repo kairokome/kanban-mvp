@@ -374,7 +374,8 @@ function editTask(id) {
     document.getElementById('task-assignee').value = task.assignee || '';
     document.getElementById('task-priority').value = task.priority;
     document.getElementById('task-status').value = task.status;
-    document.getElementById('task-due').value = task.due_date || '';
+    const dueEl = document.getElementById('task-due');
+    if (dueEl) dueEl.value = task.due_date || '';
     document.getElementById('task-modal').classList.remove('hidden');
 }
 
@@ -402,13 +403,14 @@ function saveTask(e) {
     console.log('SaveTask called, isSaving=true');
     
     const id = document.getElementById('task-id').value;
+    const dueEl = document.getElementById('task-due');
     const taskData = {
         title: document.getElementById('task-title').value.trim(),
         description: document.getElementById('task-desc').value.trim(),
         assignee: document.getElementById('task-assignee').value.trim() || 'Me',
         priority: document.getElementById('task-priority').value,
         status: document.getElementById('task-status').value,
-        due_date: document.getElementById('task-due').value || null
+        due_date: (dueEl && dueEl.value) ? dueEl.value : null
     };
     
     if (!taskData.title) {
