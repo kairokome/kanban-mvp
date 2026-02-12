@@ -168,6 +168,14 @@ async function checkStoredAuth() {
 
 // Load tasks
 function loadTasks() {
+    // DEV LOG: Log initial state before fetch
+    console.log("[COUNT DEBUG] Before fetch", {
+        apiTasksLength: 'pending',
+        allCount: tasks.length,
+        myCount: tasks.filter(t => isMyTask(t)).length,
+        legacyPillPresent: !!document.getElementById('global-task-pill')
+    });
+
     apiFetch('/api/tasks')
     .then(res => {
         if (!res.ok) {
@@ -182,9 +190,36 @@ function loadTasks() {
     })
     .then(data => {
         tasks = data;
+        
+        // DEV LOG: After fetch, derive counts strictly from API array
+        const apiTasksLength = tasks.length;
+        const filteredTasks = getFilteredTasks();
+        const myTasks = tasks.filter(t => isMyTask(t));
+        
+        console.log("[COUNT DEBUG]", {
+            apiTasksLength,
+            allCount: filteredTasks.length,
+            myCount: myTasks.length,
+            legacyPillPresent: !!document.getElementById('global-task-pill')
+        });
+
+        // DEV ERROR: If counts don't match API-derived values, log error
+        if (filteredTasks.length !== apiTasksLength && currentView === 'all') {
+            console.error("[COUNT ERROR] allCount mismatch:", {
+                expected: apiTasksLength,
+                actual: filteredTasks.length
+            });
+        }
+        if (myTasks.length !== apiTasksLength && currentView === 'my') {
+            console.error("[COUNT ERROR] myCount mismatch:", {
+                expected: apiTasksLength,
+                actual: myTasks.length
+            });
+        }
+
         updateStats();
         
-        // Update view tab counts (single source of truth)
+        // Update view tab counts (single source of truth - derived from API tasks array)
         const allCount = tasks.length;
         const myCount = tasks.filter(t => isMyTask(t)).length;
         const allTab = document.getElementById('view-all');
@@ -228,6 +263,14 @@ function updateStats() {
         return new Date(t.due_date) < new Date();
     }).length;
 
+    // DEV LOG: Stats update verification
+    console.log("[COUNT DEBUG] updateStats", {
+        apiTasksLength: tasks.length,
+        allCount: filteredTasks.length,
+        myCount: tasks.filter(t => isMyTask(t)).length,
+        legacyPillPresent: !!document.getElementById('global-task-pill')
+    });
+
     document.getElementById('stat-total').textContent = `${total} task${total !== 1 ? 's' : ''}`;
     document.getElementById('stat-done').textContent = `${done} done`;
     document.getElementById('stat-overdue').textContent = `${overdue} overdue`;
@@ -244,11 +287,19 @@ function switchView(view) {
         ? 'px-3 py-1 text-sm rounded-md font-medium transition bg-white text-gray-900 shadow-sm'
         : 'px-3 py-1 text-sm rounded-md font-medium transition text-gray-500 hover:text-gray-700';
     
-    // Get counts for both views
+    // Get counts for both views - derive from API tasks array only
     const allCount = tasks.length;
     const myCount = tasks.filter(t => isMyTask(t)).length;
     
-    // Update tab text with inline counts (single source of truth)
+    // DEV LOG: View switch count verification
+    console.log("[COUNT DEBUG] switchView", {
+        apiTasksLength: tasks.length,
+        allCount,
+        myCount,
+        legacyPillPresent: !!document.getElementById('global-task-pill')
+    });
+
+    // Update tab text with inline counts (single source of truth - API array)
     document.getElementById('view-all').textContent = `All (${allCount})`;
     document.getElementById('view-my').textContent = `My Tasks (${myCount})`;
     
@@ -277,8 +328,20 @@ function renderBoard() {
         { id: 'Done', emoji: '✅' }
     ];
 
-    // Single source of truth: filter from current tasks state
+    // Single source of truth: filter from current tasks state (API-derived)
     const isMyTasksView = currentView === 'my';
+    const apiTasksLength = tasks.length;
+    const filteredTasks = getFilteredTasks();
+    const myTasks = tasks.filter(t => isMyTask(t));
+
+    // DEV LOG: Verify counts match API source
+    console.log("[COUNT DEBUG] renderBoard", {
+        apiTasksLength,
+        allCount: filteredTasks.length,
+        myCount: myTasks.length,
+        currentView,
+        legacyPillPresent: !!document.getElementById('global-task-pill')
+    });
 
     // Derive global count strictly from same array used to render columns
     let columnCounts = {};
@@ -293,7 +356,7 @@ function renderBoard() {
         globalCount += colTasks.length;
     });
 
-    // Update view tabs with counts (single source of truth for UI)
+    // Update view tabs with counts (single source of truth - API tasks array)
     const allCount = tasks.length;
     const myCount = tasks.filter(t => isMyTask(t)).length;
     const allTab = document.getElementById('view-all');
