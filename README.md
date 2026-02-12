@@ -267,6 +267,83 @@ curl -X POST http://localhost:3000/api/cards/abc123/transition \
 2. **Agents cannot modify unassigned tasks** — Only Founder can modify tasks without an owner
 3. **Claim requirement** — Agents must claim unassigned tasks via `/api/tasks/:id/claim` before moving them
 
+## 🔧 Manager Poller (Discord Notifications)
+
+The manager poller periodically fetches tasks from "Agent Inbox" and "Review" columns and posts summaries to Discord.
+
+### Configuration
+
+Add these variables to your `.env` file:
+
+```bash
+# Discord webhook URL (required for poller)
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN
+
+# Poll interval in seconds (default: 300 = 5 minutes)
+POLL_INTERVAL_SECONDS=300
+
+# Kanban API base URL (default: http://localhost:3000)
+KANBAN_BASE_URL=http://localhost:3000
+```
+
+### Getting a Discord Webhook
+
+1. Open Discord and go to Server Settings → Integrations
+2. Click "Create Webhook" or "Manage Webhooks"
+3. Copy the webhook URL
+
+### Usage
+
+```bash
+# Start continuous polling (every 5 minutes)
+npm run poller
+
+# Send a test message to verify Discord connectivity
+npm run poller:test
+```
+
+### Output
+
+The poller sends a summary to Discord showing:
+- **Agent Inbox** — Tasks waiting to be picked up
+- **Review** — Tasks awaiting review
+
+Each embed includes:
+- Task count and overdue count
+- Top 5 tasks (priority, due date, owner)
+- Overdue tasks highlighted in red
+
+### Docker Deployment
+
+Add poller to your docker-compose.yml:
+
+```yaml
+services:
+  kanban:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - OWNER_PASSWORD=your-password
+      - AGENT_API_KEY=agent-secret-key
+      - DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
+      - POLL_INTERVAL_SECONDS=300
+    volumes:
+      - ./data:/app/data
+
+  kanban-poller:
+    image: node:18-alpine
+    working_dir: /app
+    command: node poller.js
+    environment:
+      - DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
+      - AGENT_API_KEY=agent-secret-key
+      - KANBAN_BASE_URL=http://kanban:3000
+      - POLL_INTERVAL_SECONDS=300
+    volumes:
+      - ./kanban-mvp/poller.js:/app/poller.js:ro
+```
+
 ## 🎨 Customization
 
 ### Change Colors

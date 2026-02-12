@@ -1,11 +1,13 @@
 {
   "name": "kanban-mvp",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Self-hosted Kanban board with SQLite persistence",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "poller": "node poller.js",
+    "poller:test": "node poller.js --test"
   },
   "dependencies": {
     "dotenv": "^16.3.1",
