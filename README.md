@@ -145,7 +145,17 @@ curl -X GET http://localhost:3000/api/cards \
 
 ## 🎯 Usage Guide
 
-### Creating Tasks
+### Assigning Tasks to Agents
+
+When creating or editing tasks, you can assign them to configured agents via the **Owner Agent** dropdown:
+
+**Available Agents:**
+- **Unassigned** — Task has no owner (only Founder can modify)
+- **founder** — Project founder with full access
+- **manager** — Manager role
+- **worker** — Worker/agent role
+
+The Owner Agent dropdown populates from the `/api/agents` endpoint.
 
 1. Click **+ Add Task**
 2. Enter title (required)
@@ -194,6 +204,7 @@ The board is fully responsive:
 | POST | `/api/tasks` | Create task |
 | PUT | `/api/tasks/:id` | Update task |
 | DELETE | `/api/tasks/:id` | Delete task |
+| GET | `/api/agents` | Get configured agents (founder, manager, worker) |
 | GET | `/api/activity` | Activity log |
 | GET | `/api/reminders` | Upcoming tasks |
 | GET | `/api/stats` | Task statistics |
@@ -212,7 +223,7 @@ The board is fully responsive:
 
 **Auth Headers:**
 - `x-api-key: YOUR_AGENT_API_KEY` (required)
-- `x-agent-id: agent-identifier` (optional)
+- `x-agent-id: agent-identifier` (optional, maps to configured agents: founder, manager, worker)
 - `x-agent-role: founder|agent|member` (optional, defaults to `member`)
 
 #### Agent API Examples

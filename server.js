@@ -313,12 +313,12 @@ function validateTransition(task, newStatus, agentInfo) {
 
 // ============ API Routes ============
 
-// Get configured agents (v1 hardcoded)
+// Get configured agents (v2 - renamed for clarity)
 app.get('/api/agents', authMiddleware, (req, res) => {
     const agents = [
-        'owner',
+        'founder',
         'manager',
-        'specialist-a'
+        'worker'
     ];
     res.json({ agents });
 });
