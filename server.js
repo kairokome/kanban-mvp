@@ -2,6 +2,8 @@ const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
+const pkg = require('./package.json');
+
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -19,6 +21,16 @@ const authMiddleware = (req, res, next) => {
         next();
     } else {
         res.status(401).json({ error: 'Unauthorized' });
+    }
+};
+
+// Agent API key authentication middleware
+const agentAuthMiddleware = (req, res, next) => {
+    const apiKey = req.headers['x-api-key'];
+    if (apiKey && apiKey === process.env.AGENT_API_KEY) {
+        next();
+    } else {
+        res.status(401).json({ error: 'Invalid or missing API key' });
     }
 };
 
@@ -99,6 +111,16 @@ db.serialize(() => {
         task_title TEXT,
         due_date TEXT,
         notified INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now'))
+    )`);
+
+    // Comments table for task comments
+    db.run(`CREATE TABLE IF NOT EXISTS comments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        task_id TEXT NOT NULL,
+        content TEXT NOT NULL,
+        agent_id TEXT,
+        agent_role TEXT,
         created_at TEXT DEFAULT (datetime('now'))
     )`);
 });
@@ -260,6 +282,178 @@ function validateTransition(task, newStatus, agentInfo) {
 }
 
 // ============ API Routes ============
+
+// Get configured agents (v1 hardcoded)
+app.get('/api/agents', authMiddleware, (req, res) => {
+    const agents = [
+        'owner',
+        'manager',
+        'specialist-a'
+    ];
+    res.json({ agents });
+});
+
+// Get server version from package.json
+app.get('/api/version', (req, res) => {
+    res.json({ version: pkg.version });
+});
+
+// ============ Agent API Endpoints (Phase 1) ============
+
+// GET /api/cards?status= - Get tasks filtered by status (Agent API)
+app.get('/api/cards', agentAuthMiddleware, (req, res) => {
+    const status = req.query.status;
+    let query = 'SELECT * FROM tasks';
+    const params = [];
+
+    if (status) {
+        query += ' WHERE status = ?';
+        params.push(status);
+    }
+
+    query += ' ORDER BY created_at DESC';
+
+    db.all(query, params, (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
+
+// POST /api/cards - Create task with default list = "Agent Inbox" (Agent API)
+app.post('/api/cards', agentAuthMiddleware, (req, res) => {
+    const { title, description, assignee, priority, status, due_date, branch, repo } = req.body;
+    const agentInfo = getAgentIdentity(req);
+    const id = Date.now().toString(36) + Math.random().toString(36).substr(2);
+
+    // Default to "Agent Inbox" if no status provided
+    const finalStatus = status || 'Agent Inbox';
+    const finalOwnerAgent = agentInfo.agentId;
+
+    db.run(
+        'INSERT INTO tasks (id, title, description, assignee, owner_agent, priority, status, due_date, branch, repo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [id, title, description || '', assignee || '', finalOwnerAgent, priority || 'Medium', finalStatus, due_date || null, branch || null, repo || null],
+        function(err) {
+            if (err) return res.status(500).json({ error: err.message });
+            logActivity('create', id, title, `Created task "${title}" via Agent API`, agentInfo);
+            res.status(201).json({
+                id,
+                title,
+                description,
+                assignee,
+                owner_agent: finalOwnerAgent,
+                priority,
+                status: finalStatus,
+                due_date,
+                branch,
+                repo,
+                message: 'Task created successfully'
+            });
+        }
+    );
+});
+
+// POST /api/cards/:id/comment - Add comment to task (Agent API)
+app.post('/api/cards/:id/comment', agentAuthMiddleware, (req, res) => {
+    const taskId = req.params.id;
+    const { content } = req.body;
+    const agentInfo = getAgentIdentity(req);
+
+    if (!content) {
+        return res.status(400).json({ error: 'Comment content is required' });
+    }
+
+    // Verify task exists
+    db.get('SELECT * FROM tasks WHERE id = ?', [taskId], (err, task) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!task) return res.status(404).json({ error: 'Task not found' });
+
+        db.run(
+            'INSERT INTO comments (task_id, content, agent_id, agent_role) VALUES (?, ?, ?, ?)',
+            [taskId, content, agentInfo.agentId, agentInfo.agentRole],
+            function(err) {
+                if (err) return res.status(500).json({ error: err.message });
+                logActivity('comment', taskId, task.title, `Comment added by ${agentInfo.agentId}: "${content.substring(0, 50)}..."`, agentInfo);
+                res.status(201).json({
+                    id: this.lastID,
+                    task_id: taskId,
+                    content,
+                    agent_id: agentInfo.agentId,
+                    agent_role: agentInfo.agentRole,
+                    message: 'Comment added successfully'
+                });
+            }
+        );
+    });
+});
+
+// POST /api/cards/:id/transition - Move task with role validation (Agent API)
+app.post('/api/cards/:id/transition', agentAuthMiddleware, (req, res) => {
+    const taskId = req.params.id;
+    const { status: newStatus } = req.body;
+    const agentInfo = getAgentIdentity(req);
+
+    if (!newStatus) {
+        return res.status(400).json({ error: 'New status is required' });
+    }
+
+    db.get('SELECT * FROM tasks WHERE id = ?', [taskId], (err, task) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!task) return res.status(404).json({ error: 'Task not found' });
+
+        // Validate transition with safety gates
+        const validation = validateTransition(task, newStatus, agentInfo);
+
+        if (!validation.allowed) {
+            // Log the denied transition attempt
+            logTransitionAttempt(
+                taskId, task.title, task.status, newStatus,
+                agentInfo, false, validation.reason,
+                task.branch, task.repo
+            );
+            return res.status(403).json({
+                error: 'Transition denied',
+                reason: validation.reason,
+                from_status: task.status,
+                to_status: newStatus
+            });
+        }
+
+        // Perform the transition
+        db.run(
+            'UPDATE tasks SET status = ?, updated_at = datetime("now") WHERE id = ?',
+            [newStatus, taskId],
+            function(err) {
+                if (err) return res.status(500).json({ error: err.message });
+
+                // Log successful transition
+                logTransitionAttempt(
+                    taskId, task.title, task.status, newStatus,
+                    agentInfo, true, null,
+                    task.branch, task.repo
+                );
+
+                res.json({
+                    id: taskId,
+                    from_status: task.status,
+                    to_status: newStatus,
+                    message: 'Task transitioned successfully'
+                });
+            }
+        );
+    });
+});
+
+// GET /api/cards/:id/comments - Get comments for a task (Agent API helper)
+app.get('/api/cards/:id/comments', agentAuthMiddleware, (req, res) => {
+    const taskId = req.params.id;
+
+    db.all('SELECT * FROM comments WHERE task_id = ? ORDER BY created_at ASC', [taskId], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
+
+// ============ End Agent API Endpoints ============
 
 // Get all tasks
 app.get('/api/tasks', authMiddleware, (req, res) => {

@@ -15,6 +15,7 @@ A modern, self-hosted Kanban board with SQLite persistence, activity logging, an
 - **🔐 Single-User Auth** — Simple password protection
 - **💾 Persistent Storage** — SQLite database survives restarts
 - **📱 Mobile Friendly** — Works on phones and tablets
+- **🤖 Agent API** — REST API for programmatic task management
 
 ## 🚀 Quick Start
 
@@ -28,11 +29,17 @@ docker-compose up -d
 # Default password: kanban123
 ```
 
-### Option 2: Node.js
+### Option 2: Node.js (Local Development)
 
 ```bash
+# Install dependencies
 npm install
-npm start
+
+# Copy environment file (optional - uses defaults)
+cp .env.example .env
+
+# Start development server
+npm run dev
 
 # Open http://localhost:3000
 ```
@@ -42,6 +49,8 @@ npm start
 See [Deployment Guide](#render-deployment) below.
 
 ## 🔐 Authentication
+
+### Web UI Authentication
 
 Default password: `kanban123`
 
@@ -55,6 +64,26 @@ Or in Docker:
 environment:
   - OWNER_PASSWORD=your-secure-password
 ```
+
+### Agent API Authentication
+
+Agents authenticate using an API key via the `x-api-key` header:
+
+```bash
+# Set API key in environment
+export AGENT_API_KEY=your-agent-api-key
+```
+
+**Example authenticated request:**
+```bash
+curl -X GET http://localhost:3000/api/cards \
+  -H "x-api-key: your-agent-api-key"
+```
+
+**Required Headers for Agent Endpoints:**
+- `x-api-key` — Your agent API key (required for all agent endpoints)
+- `x-agent-id` — Agent identifier (optional, used for task ownership)
+- `x-agent-role` — Agent role: `founder`, `agent`, or `member` (optional, defaults to `member`)
 
 ## 📁 Data Storage
 
@@ -109,6 +138,8 @@ The board is fully responsive:
 
 ## 🔧 API Reference
 
+### Web API (Owner Authentication)
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/tasks` | Get all tasks |
@@ -120,6 +151,62 @@ The board is fully responsive:
 | GET | `/api/stats` | Task statistics |
 
 **Auth Header:** `x-owner-password: YOUR_PASSWORD`
+
+### Agent API (API Key Authentication)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/cards?status=` | Get tasks filtered by status |
+| POST | `/api/cards` | Create task (default: "Agent Inbox") |
+| GET | `/api/cards/:id/comments` | Get comments for a task |
+| POST | `/api/cards/:id/comment` | Add comment to task |
+| POST | `/api/cards/:id/transition` | Move task with role validation |
+
+**Auth Headers:**
+- `x-api-key: YOUR_AGENT_API_KEY` (required)
+- `x-agent-id: agent-identifier` (optional)
+- `x-agent-role: founder|agent|member` (optional, defaults to `member`)
+
+#### Agent API Examples
+
+```bash
+# Get all tasks
+curl -X GET http://localhost:3000/api/cards \
+  -H "x-api-key: your-agent-api-key"
+
+# Get tasks with specific status
+curl -X GET "http://localhost:3000/api/cards?status=Ongoing" \
+  -H "x-api-key: your-agent-api-key"
+
+# Create a new task
+curl -X POST http://localhost:3000/api/cards \
+  -H "x-api-key: your-agent-api-key" \
+  -H "x-agent-id: agent-1" \
+  -H "x-agent-role: agent" \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Process customer request", "priority": "High"}'
+
+# Add a comment to a task
+curl -X POST http://localhost:3000/api/cards/abc123/comment \
+  -H "x-api-key: your-agent-api-key" \
+  -H "x-agent-id: agent-1" \
+  -H "Content-Type: application/json" \
+  -d '{"content": "Working on this now"}'
+
+# Transition task to a new status
+curl -X POST http://localhost:3000/api/cards/abc123/transition \
+  -H "x-api-key: your-agent-api-key" \
+  -H "x-agent-id: agent-1" \
+  -H "x-agent-role: agent" \
+  -H "Content-Type: application/json" \
+  -d '{"status": "Ongoing"}'
+```
+
+#### Server-Side Rules for Agents
+
+1. **Only Founder can move tasks to Done** — The `Review → Done` transition requires `x-agent-role: founder`
+2. **Agents cannot modify unassigned tasks** — Only Founder can modify tasks without an owner
+3. **Claim requirement** — Agents must claim unassigned tasks via `/api/tasks/:id/claim` before moving them
 
 ## 🎨 Customization
 
