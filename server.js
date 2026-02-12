@@ -112,6 +112,55 @@ const ROLES = {
     MEMBER: 'member'
 };
 
+// ============ Unassigned Task Safety ============
+
+// Check if task is unassigned (null or empty string)
+function isUnassigned(task) {
+    return !task.owner_agent || task.owner_agent === '' || task.owner_agent === null;
+}
+
+// Validate action on unassigned task
+function validateUnassignedAction(task, agentInfo, action) {
+    const { agentId, agentRole } = agentInfo;
+    const role = (agentRole || '').toLowerCase();
+    
+    // Unassigned tasks can only be modified by Founder
+    if (isUnassigned(task)) {
+        if (role !== ROLES.FOUNDER) {
+            return {
+                allowed: false,
+                reason: `Cannot ${action} unassigned task. Only Founder can modify unassigned tasks.`
+            };
+        }
+    }
+    
+    return { allowed: true };
+}
+
+// Validate claim action
+function validateClaimAction(task, agentInfo) {
+    const { agentId, agentRole } = agentInfo;
+    const role = (agentRole || '').toLowerCase();
+    
+    // Only agents can claim tasks
+    if (role !== ROLES.FOUNDER && role !== ROLES.AGENT) {
+        return {
+            allowed: false,
+            reason: 'Only Founder or Agents can claim tasks'
+        };
+    }
+    
+    // Cannot claim if already assigned to someone
+    if (!isUnassigned(task)) {
+        return {
+            allowed: false,
+            reason: `Task is already assigned to ${task.owner_agent}`
+        };
+    }
+    
+    return { allowed: true };
+}
+
 // Status transition rules with safety gates
 const TRANSITION_RULES = {
     // Work lock: only assigned agent can move to Ongoing
@@ -161,6 +210,16 @@ function logTransitionAttempt(taskId, taskTitle, fromStatus, toStatus, agentInfo
 
 function validateTransition(task, newStatus, agentInfo) {
     const { agentId, agentRole } = agentInfo;
+    const role = (agentRole || '').toLowerCase();
+    
+    // ============ Unassigned Task Safety ============
+    // Only Founder can move/change status of unassigned tasks
+    const unassignedCheck = validateUnassignedAction(task, agentInfo, 'move or change status');
+    if (!unassignedCheck.allowed) {
+        return unassignedCheck;
+    }
+    // ===============================================
+    
     const rule = TRANSITION_RULES[newStatus];
 
     // If no special rule for this transition, allow it
@@ -177,8 +236,8 @@ function validateTransition(task, newStatus, agentInfo) {
     }
 
     // Check role restrictions
-    const role = (agentRole || '').toLowerCase();
-    if (rule.requiresFounder && role !== ROLES.FOUNDER) {
+    const actorRole = (agentRole || '').toLowerCase();
+    if (rule.requiresFounder && actorRole !== ROLES.FOUNDER) {
         return {
             allowed: false,
             reason: 'Only Founder can complete this transition'
@@ -188,7 +247,7 @@ function validateTransition(task, newStatus, agentInfo) {
     // Check ownership requirement (only assigned agent can move to certain statuses)
     if (rule.requiresOwnership) {
         const isOwner = task.owner_agent === agentId || task.assignee === agentId;
-        const isFounder = role === ROLES.FOUNDER;
+        const isFounder = actorRole === ROLES.FOUNDER;
         if (!isOwner && !isFounder) {
             return {
                 allowed: false,
@@ -233,6 +292,45 @@ app.post('/api/tasks', authMiddleware, (req, res) => {
     );
 });
 
+// ============ Claim Task ============
+// Agent can claim an unassigned task
+app.post('/api/tasks/:id/claim', authMiddleware, (req, res) => {
+    const taskId = req.params.id;
+    const agentInfo = getAgentIdentity(req);
+
+    db.get('SELECT * FROM tasks WHERE id = ?', [taskId], (err, task) => {
+        if (err || !task) return res.status(404).json({ error: 'Task not found' });
+
+        // Validate claim action
+        const claimValidation = validateClaimAction(task, agentInfo);
+        if (!claimValidation.allowed) {
+            logActivity('claim_denied', taskId, task.title, 
+                `Claim attempt by ${agentInfo.agentId} denied: ${claimValidation.reason}`, 
+                agentInfo);
+            return res.status(403).json({ error: 'Claim denied', reason: claimValidation.reason });
+        }
+
+        // Perform the claim
+        db.run(
+            'UPDATE tasks SET owner_agent = ?, updated_at = datetime("now") WHERE id = ?',
+            [agentInfo.agentId, taskId],
+            function(err) {
+                if (err) return res.status(500).json({ error: err.message });
+
+                logActivity('claim', taskId, task.title, 
+                    `Task claimed by ${agentInfo.agentId}`, 
+                    agentInfo);
+
+                res.json({
+                    id: taskId,
+                    owner_agent: agentInfo.agentId,
+                    message: 'Task claimed successfully'
+                });
+            }
+        );
+    });
+});
+
 // Update task (with safety gates for status transitions)
 app.put('/api/tasks/:id', authMiddleware, (req, res) => {
     const { title, description, assignee, priority, status, due_date, owner_agent, branch, repo } = req.body;
@@ -241,6 +339,20 @@ app.put('/api/tasks/:id', authMiddleware, (req, res) => {
 
     db.get('SELECT * FROM tasks WHERE id = ?', [taskId], (err, task) => {
         if (err || !task) return res.status(404).json({ error: 'Task not found' });
+
+        // ============ Unassigned Task Safety ============
+        // Validate owner_agent changes on unassigned tasks
+        if (owner_agent !== undefined && owner_agent !== task.owner_agent) {
+            // Non-Founders cannot assign to unassigned tasks (except via claim)
+            const role = (agentInfo.agentRole || '').toLowerCase();
+            if (isUnassigned(task) && role !== ROLES.FOUNDER && role !== ROLES.AGENT) {
+                return res.status(403).json({
+                    error: 'Assignment denied',
+                    reason: 'Only Founder or Agents can assign unassigned tasks'
+                });
+            }
+        }
+        // ===============================================
 
         // Handle status transition validation
         let statusChangeInfo = null;

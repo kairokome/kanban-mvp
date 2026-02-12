@@ -297,9 +297,17 @@ function createTaskCard(task) {
     const dueClass = isOverdue ? 'text-red-600' : 'text-gray-400';
     const assignee = task.assignee || 'Me';
 
-    // Show owner_agent badge if different from assignee
+    // Check if task is unassigned
+    const isUnassigned = !task.owner_agent || task.owner_agent === '';
+
+    // Show owner_agent badge
     const ownerBadge = task.owner_agent && task.owner_agent !== assignee
         ? `<span class="bg-indigo-100 text-indigo-700 text-xs px-2 py-0.5 rounded ml-1" title="Owner Agent">🤖 ${escapeHtml(task.owner_agent)}</span>`
+        : '';
+
+    // Unassigned indicator
+    const unassignedBadge = isUnassigned
+        ? `<span class="bg-gray-200 text-gray-600 text-xs px-2 py-0.5 rounded ml-1" title="Unassigned">⚪ Unassigned</span>`
         : '';
 
     // Show branch/repo metadata
@@ -310,6 +318,12 @@ function createTaskCard(task) {
     if (task.repo) {
         metadataHtml.push(`<span class="text-xs text-gray-500">📦 ${escapeHtml(task.repo)}</span>`);
     }
+
+    // Claim button (only for agents on unassigned tasks)
+    const isAgent = agentIdentity.agentRole === 'agent' || agentIdentity.agentRole === 'founder';
+    const claimButtonHtml = (isUnassigned && isAgent)
+        ? `<button onclick="claimTask('${task.id}')" class="claim-btn flex-1 py-1 text-xs text-indigo-600 hover:text-white hover:bg-indigo-600 rounded transition" title="Claim this task">Claim</button>`
+        : '';
 
     card.innerHTML = `
         <div class="flex items-start justify-between gap-2 mb-2">
@@ -323,7 +337,7 @@ function createTaskCard(task) {
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
                 </svg>
-                ${escapeHtml(assignee)}${ownerBadge}
+                ${escapeHtml(assignee)}${ownerBadge}${unassignedBadge}
             </span>
             <span class="${dueClass} flex items-center gap-1">
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -333,6 +347,7 @@ function createTaskCard(task) {
             </span>
         </div>
         <div class="flex gap-1 mt-2">
+            ${claimButtonHtml}
             <button onclick="editTask('${task.id}')" class="flex-1 py-1 text-xs text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition" title="Edit">
                 <svg class="w-3.5 h-3.5 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
@@ -382,12 +397,57 @@ function moveTask(taskId, newStatus) {
     });
 }
 
+// Claim task
+function claimTask(taskId) {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    if (!agentIdentity.agentId) {
+        alert('Agent identity not set. Please configure your agent ID.');
+        return;
+    }
+
+    if (!confirm(`Claim task "${task.title}"? You will become the owner.`)) return;
+
+    apiFetch(`/api/tasks/${taskId}/claim`, {
+        method: 'POST'
+    })
+    .then(res => {
+        if (!res.ok) {
+            if (res.status === 401) {
+                logout();
+                return;
+            }
+            if (res.status === 403) {
+                return res.json().then(data => {
+                    throw new Error(data.reason || 'Claim denied');
+                });
+            }
+            throw new Error('Failed to claim task');
+        }
+        return res.json();
+    })
+    .then(data => {
+        if (data) {
+            console.log('Claim success:', data);
+            loadTasks();
+            loadReminders();
+            showNotification('Task claimed!');
+        }
+    })
+    .catch(err => {
+        console.error('Claim error:', err);
+        alert('Error claiming task: ' + err.message);
+    });
+}
+
 // Add/Edit Task
 function showAddTask() {
     resetFormState();
     document.getElementById('modal-title').textContent = 'Add Task';
     document.getElementById('task-form').reset();
     document.getElementById('task-id').value = '';
+    populateOwnerAgentDropdown('');
     document.getElementById('task-modal').classList.remove('hidden');
 }
 
@@ -409,7 +469,9 @@ function editTask(id) {
 
     // New fields
     const ownerAgentEl = document.getElementById('task-owner-agent');
-    if (ownerAgentEl) ownerAgentEl.value = task.owner_agent || '';
+    if (ownerAgentEl) {
+        populateOwnerAgentDropdown(task.owner_agent || '');
+    }
 
     const branchEl = document.getElementById('task-branch');
     if (branchEl) branchEl.value = task.branch || '';
@@ -418,6 +480,42 @@ function editTask(id) {
     if (repoEl) repoEl.value = task.repo || '';
 
     document.getElementById('task-modal').classList.remove('hidden');
+}
+
+// Populate owner agent dropdown with available agents
+function populateOwnerAgentDropdown(selectedValue) {
+    const selectEl = document.getElementById('task-owner-agent');
+    if (!selectEl) return;
+
+    // Save current selection if any
+    const currentSelection = selectEl.value;
+
+    // Clear existing options (except "Unassigned")
+    selectEl.innerHTML = '<option value="">Unassigned</option>';
+
+    // Get agent ID from agentIdentity or localStorage
+    const agentId = agentIdentity.agentId || localStorage.getItem('agentId') || '';
+    const agentRole = agentIdentity.agentRole || localStorage.getItem('agentRole') || 'member';
+
+    // Only show current agent as option if role is agent or founder
+    if ((agentRole === 'agent' || agentRole === 'founder') && agentId) {
+        const option = document.createElement('option');
+        option.value = agentId;
+        option.textContent = `${agentId} (You)`;
+        selectEl.appendChild(option);
+    }
+
+    // Try to restore previous selection
+    if (currentSelection && currentSelection !== selectedValue) {
+        // If there was a user selection, preserve it
+        const prevOption = document.createElement('option');
+        prevOption.value = currentSelection;
+        prevOption.textContent = currentSelection;
+        selectEl.appendChild(prevOption);
+        selectEl.value = currentSelection;
+    } else {
+        selectEl.value = selectedValue;
+    }
 }
 
 function saveTask(e) {
@@ -453,7 +551,7 @@ function saveTask(e) {
         title: document.getElementById('task-title').value.trim(),
         description: document.getElementById('task-desc').value.trim(),
         assignee: document.getElementById('task-assignee').value.trim() || 'Me',
-        owner_agent: ownerAgentEl ? ownerAgentEl.value.trim() : '',
+        owner_agent: ownerAgentEl ? ownerAgentEl.value : '', // Use value as-is (dropdown, not trimmed)
         priority: document.getElementById('task-priority').value,
         status: document.getElementById('task-status').value,
         due_date: (dueEl && dueEl.value) ? dueEl.value : null,
@@ -461,8 +559,9 @@ function saveTask(e) {
         repo: repoEl ? repoEl.value.trim() : ''
     };
 
-    // Auto-populate agent identity if not set
-    if (!taskData.owner_agent && agentIdentity.agentId) {
+    // Auto-populate agent identity for new tasks if owner is Unassigned and user is an agent
+    const role = agentIdentity.agentRole || localStorage.getItem('agentRole') || 'member';
+    if (!taskData.owner_agent && role === 'agent' && agentIdentity.agentId) {
         taskData.owner_agent = agentIdentity.agentId;
     }
     if (!taskData.branch && agentIdentity.branch) {
