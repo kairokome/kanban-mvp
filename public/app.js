@@ -5,10 +5,18 @@ let isSaving = false;
 let saveTimeout = null;
 let authTimeout = null;
 
+// Agent identity (can be set by external systems)
+let agentIdentity = {
+    agentId: localStorage.getItem('agentId') || '',
+    agentRole: localStorage.getItem('agentRole') || 'member',
+    branch: localStorage.getItem('branch') || '',
+    repo: localStorage.getItem('repo') || ''
+};
+
 // Set current date in header
 document.getElementById('current-date').textContent = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
 
-// Centralized API fetch with auth header
+// Centralized API fetch with auth header and agent identity
 function apiFetch(url, options = {}) {
     const password = localStorage.getItem('ownerPassword') || '';
     return fetch(url, {
@@ -16,6 +24,8 @@ function apiFetch(url, options = {}) {
         headers: {
             'Content-Type': 'application/json',
             'x-owner-password': password,
+            'x-agent-id': agentIdentity.agentId,
+            'x-agent-role': agentIdentity.agentRole,
             ...(options.headers || {})
         }
     });
@@ -275,17 +285,31 @@ function createTaskCard(task) {
     const card = document.createElement('div');
     card.className = 'task-card bg-white rounded-lg p-3 cursor-grab shadow-sm border border-gray-200';
     card.draggable = true;
-    
+
     const isOverdue = task.due_date && new Date(task.due_date) < new Date() && task.status !== 'Done';
     const priorityColors = {
         'High': 'bg-red-100 text-red-700',
         'Medium': 'bg-amber-100 text-amber-700',
         'Low': 'bg-green-100 text-green-700'
     };
-    
+
     const dueText = task.due_date ? new Date(task.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
     const dueClass = isOverdue ? 'text-red-600' : 'text-gray-400';
     const assignee = task.assignee || 'Me';
+
+    // Show owner_agent badge if different from assignee
+    const ownerBadge = task.owner_agent && task.owner_agent !== assignee
+        ? `<span class="bg-indigo-100 text-indigo-700 text-xs px-2 py-0.5 rounded ml-1" title="Owner Agent">🤖 ${escapeHtml(task.owner_agent)}</span>`
+        : '';
+
+    // Show branch/repo metadata
+    const metadataHtml = [];
+    if (task.branch) {
+        metadataHtml.push(`<span class="text-xs text-gray-500">🌿 ${escapeHtml(task.branch)}</span>`);
+    }
+    if (task.repo) {
+        metadataHtml.push(`<span class="text-xs text-gray-500">📦 ${escapeHtml(task.repo)}</span>`);
+    }
 
     card.innerHTML = `
         <div class="flex items-start justify-between gap-2 mb-2">
@@ -293,12 +317,13 @@ function createTaskCard(task) {
             <span class="${priorityColors[task.priority] || 'bg-gray-100 text-gray-600'} text-xs px-2 py-0.5 rounded font-medium flex-shrink-0">${task.priority}</span>
         </div>
         ${task.description ? `<p class="text-xs text-gray-500 mb-2">${escapeHtml(task.description)}</p>` : ''}
+        ${metadataHtml.length ? `<div class="flex gap-2 mb-2">${metadataHtml.join('')}</div>` : ''}
         <div class="flex items-center justify-between text-xs mt-auto pt-2 border-t border-gray-100 flex-shrink-0">
             <span class="flex items-center gap-1 text-gray-500">
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
                 </svg>
-                ${escapeHtml(assignee)}
+                ${escapeHtml(assignee)}${ownerBadge}
             </span>
             <span class="${dueClass} flex items-center gap-1">
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -369,7 +394,7 @@ function showAddTask() {
 function editTask(id) {
     const task = tasks.find(t => t.id === id);
     if (!task) return;
-    
+
     resetFormState();
     document.getElementById('modal-title').textContent = 'Edit Task';
     document.getElementById('task-id').value = task.id;
@@ -378,8 +403,20 @@ function editTask(id) {
     document.getElementById('task-assignee').value = task.assignee || '';
     document.getElementById('task-priority').value = task.priority;
     document.getElementById('task-status').value = task.status;
+
     const dueEl = document.getElementById('task-due');
     if (dueEl) dueEl.value = task.due_date || '';
+
+    // New fields
+    const ownerAgentEl = document.getElementById('task-owner-agent');
+    if (ownerAgentEl) ownerAgentEl.value = task.owner_agent || '';
+
+    const branchEl = document.getElementById('task-branch');
+    if (branchEl) branchEl.value = task.branch || '';
+
+    const repoEl = document.getElementById('task-repo');
+    if (repoEl) repoEl.value = task.repo || '';
+
     document.getElementById('task-modal').classList.remove('hidden');
 }
 
@@ -403,36 +440,54 @@ function saveTask(e) {
     // Disable all form inputs
     const inputs = document.querySelectorAll('#task-form input, #task-form select, #task-form textarea');
     inputs.forEach(input => input.disabled = true);
-    
+
     console.log('SaveTask called, isSaving=true');
-    
+
     const id = document.getElementById('task-id').value;
     const dueEl = document.getElementById('task-due');
+    const ownerAgentEl = document.getElementById('task-owner-agent');
+    const branchEl = document.getElementById('task-branch');
+    const repoEl = document.getElementById('task-repo');
+
     const taskData = {
         title: document.getElementById('task-title').value.trim(),
         description: document.getElementById('task-desc').value.trim(),
         assignee: document.getElementById('task-assignee').value.trim() || 'Me',
+        owner_agent: ownerAgentEl ? ownerAgentEl.value.trim() : '',
         priority: document.getElementById('task-priority').value,
         status: document.getElementById('task-status').value,
-        due_date: (dueEl && dueEl.value) ? dueEl.value : null
+        due_date: (dueEl && dueEl.value) ? dueEl.value : null,
+        branch: branchEl ? branchEl.value.trim() : '',
+        repo: repoEl ? repoEl.value.trim() : ''
     };
-    
+
+    // Auto-populate agent identity if not set
+    if (!taskData.owner_agent && agentIdentity.agentId) {
+        taskData.owner_agent = agentIdentity.agentId;
+    }
+    if (!taskData.branch && agentIdentity.branch) {
+        taskData.branch = agentIdentity.branch;
+    }
+    if (!taskData.repo && agentIdentity.repo) {
+        taskData.repo = agentIdentity.repo;
+    }
+
     if (!taskData.title) {
         alert('Title is required');
         resetFormState();
         return false;
     }
-    
+
     const method = id ? 'PUT' : 'POST';
     const endpoint = id ? `/api/tasks/${id}` : '/api/tasks';
-    
+
     // 10-second timeout as escape hatch
     saveTimeout = setTimeout(() => {
         console.error('Save timeout after 10s');
         alert('Save timed out. Please try again.');
         resetFormState();
     }, 10000);
-    
+
     apiFetch(endpoint, {
         method,
         body: JSON.stringify(taskData)
@@ -442,12 +497,19 @@ function saveTask(e) {
             clearTimeout(saveTimeout);
             saveTimeout = null;
         }
-        
+
         if (res.status === 401) {
             logout();
             return;
         }
-        
+
+        if (res.status === 403) {
+            // Transition denied - show the reason
+            return res.json().then(errData => {
+                throw new Error(`Transition denied: ${errData.reason || 'Unknown reason'}`);
+            });
+        }
+
         if (!res.ok) {
             throw new Error(`HTTP ${res.status}`);
         }
@@ -474,7 +536,7 @@ function saveTask(e) {
         isSaving = false;
         resetFormState();
     });
-    
+
     return false;
 }
 
