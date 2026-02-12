@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 
 /**
- * Kanban Manager Poller (Phase 1 - Read-only)
+ * Kanban Manager Poller (Phase 1 + Phase 2)
  * 
- * Periodically fetches tasks from Agent Inbox and Review columns,
- * then posts a summary to Discord via webhook.
+ * Phase 1: Periodically fetches tasks from Agent Inbox and Review columns,
+ *          then posts a summary to Discord via webhook.
+ * Phase 2: Auto-transitions manager-owned tasks from Agent Inbox → Ongoing
  * 
  * Usage:
  *   node poller.js           # Run once
@@ -15,6 +16,7 @@
  *   POLL_INTERVAL_SECONDS  - Poll interval in seconds (default: 300)
  *   KANBAN_BASE_URL        - Kanban API base URL (default: http://localhost:3000)
  *   AGENT_API_KEY          - API key for Kanban API (required)
+ *   MANAGER_AGENT_ID       - Manager agent ID (default: manager)
  */
 
 require('dotenv').config();
@@ -24,6 +26,8 @@ const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
 const POLL_INTERVAL_SECONDS = parseInt(process.env.POLL_INTERVAL_SECONDS) || 300;
 const KANBAN_BASE_URL = process.env.KANBAN_BASE_URL || 'http://localhost:3000';
 const AGENT_API_KEY = process.env.AGENT_API_KEY;
+const MANAGER_AGENT_ID = process.env.MANAGER_AGENT_ID || 'manager';
+const MANAGER_ROLE = 'manager';
 
 // Validate required config
 if (!DISCORD_WEBHOOK_URL) {
@@ -61,6 +65,37 @@ async function fetchTasks(status) {
     } catch (error) {
         console.error(`❌ Failed to fetch ${status} tasks:`, error.message);
         return [];
+    }
+}
+
+/**
+ * Transition a task to a new status (Phase 2 - Manager Auto-transition)
+ * Uses Agent API: POST /api/cards/:id/transition
+ */
+async function transitionTask(taskId, newStatus) {
+    const url = `${KANBAN_BASE_URL}/api/cards/${taskId}/transition`;
+    
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'x-api-key': AGENT_API_KEY,
+                'x-agent-id': MANAGER_AGENT_ID,
+                'x-agent-role': MANAGER_ROLE,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ status: newStatus })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: response.statusText }));
+            throw new Error(`HTTP ${response.status}: ${errorData.error || errorData.reason || response.statusText}`);
+        }
+
+        return { success: true };
+    } catch (error) {
+        console.error(`❌ Failed to transition task ${taskId}:`, error.message);
+        return { success: false, error: error.message };
     }
 }
 
@@ -190,7 +225,7 @@ async function sendTestMessage() {
 }
 
 /**
- * Main poll function - fetches and posts summary
+ * Main poll function - fetches, auto-transitions (Phase 2), and posts summary
  */
 async function poll() {
     console.log(`\n🕐 [${new Date().toISOString()}] Polling Kanban...`);
@@ -204,16 +239,61 @@ async function poll() {
     console.log(`   - Agent Inbox: ${agentInboxTasks.length} tasks`);
     console.log(`   - Review: ${reviewTasks.length} tasks`);
 
+    // ============ Phase 2: Manager Auto-Transition ============
+    // Only transition tasks where:
+    //   - status == "Agent Inbox"
+    //   - owner_agent == MANAGER_AGENT_ID
+    //   - assignee == MANAGER_AGENT_ID (safety check)
+    // Transition: Agent Inbox → Ongoing
+    // NEVER touch: Review, Done, Worker-owned, Founder-owned tasks
+    if (agentInboxTasks.length > 0) {
+        const managerTasks = agentInboxTasks.filter(task => 
+            task.owner_agent === MANAGER_AGENT_ID && 
+            (task.assignee === MANAGER_AGENT_ID || !task.assignee)
+        );
+
+        if (managerTasks.length > 0) {
+            console.log(`\n🔄 [Phase 2] Manager Auto-Transition: ${managerTasks.length} tasks`);
+            
+            let transitioned = 0;
+            let failed = 0;
+
+            for (const task of managerTasks) {
+                console.log(`   - Processing: ${task.title} (${task.id})`);
+                
+                const result = await transitionTask(task.id, 'Ongoing');
+                
+                if (result.success) {
+                    console.log(`   ✅ [Manager Auto] Task ${task.id} moved Agent Inbox → Ongoing`);
+                    transitioned++;
+                } else {
+                    console.log(`   ❌ [Manager Auto] Task ${task.id} transition failed: ${result.error}`);
+                    failed++;
+                }
+
+                // Small delay to avoid rate limiting
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+
+            console.log(`   📊 Phase 2 Summary: ${transitioned} transitioned, ${failed} failed`);
+        }
+    }
+    // ===========================================================
+
     if (agentInboxTasks.length === 0 && reviewTasks.length === 0) {
         console.log('📭 No tasks found in monitored columns');
         return;
     }
 
-    // Build embeds
+    // Build embeds (only include tasks that weren't just transitioned)
     const embeds = [];
 
+    // Re-fetch Agent Inbox to get updated state after transitions
     if (agentInboxTasks.length > 0) {
-        embeds.push(buildEmbed(agentInboxTasks, 'Agent Inbox', '📥 Agent Inbox'));
+        const updatedAgentInbox = await fetchTasks('Agent Inbox');
+        if (updatedAgentInbox.length > 0) {
+            embeds.push(buildEmbed(updatedAgentInbox, 'Agent Inbox', '📥 Agent Inbox'));
+        }
     }
 
     if (reviewTasks.length > 0) {
@@ -254,11 +334,14 @@ async function main() {
         return;
     }
 
-    console.log('🚀 Kanban Manager Poller Started');
+    console.log('🚀 Kanban Manager Poller Started (Phase 1 + Phase 2)');
     console.log(`   Base URL: ${KANBAN_BASE_URL}`);
     console.log(`   Poll Interval: ${POLL_INTERVAL_SECONDS}s`);
     console.log(`   Webhook: ${DISCORD_WEBHOOK_URL ? '✅ Configured' : '❌ Missing'}`);
     console.log(`   API Key: ${AGENT_API_KEY ? '✅ Configured' : '❌ Missing'}`);
+    console.log(`   Manager Agent: ${MANAGER_AGENT_ID}`);
+    console.log(`   Phase 2 Auto-Transition: ✅ Enabled`);
+    console.log(`   Governance: Review → Done restricted to Founder only`);
     console.log('');
     
     // Run immediately on start
@@ -274,7 +357,7 @@ async function main() {
 }
 
 // Export for testing
-module.exports = { fetchTasks, buildEmbed, sendToDiscord, poll };
+module.exports = { fetchTasks, transitionTask, buildEmbed, sendToDiscord, poll };
 
 // Run if called directly
 if (require.main === module) {

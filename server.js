@@ -216,9 +216,10 @@ function validateClaimAction(task, agentInfo) {
 // Status transition rules with safety gates
 const TRANSITION_RULES = {
     // Work lock: only assigned agent can move to Ongoing
+    // Manager auto-transition: Agent Inbox → Ongoing (Phase 2)
     'Ongoing': {
         requiresOwnership: true,
-        fromStatuses: ['To Do', 'Backlog'],
+        fromStatuses: ['To Do', 'Backlog', 'Agent Inbox'],
         allowedRoles: [ROLES.FOUNDER, ROLES.AGENT, ROLES.MEMBER]
     },
     // Review → Done restriction to Founder only
