@@ -293,7 +293,9 @@ function renderBoard() {
         });
 
         // Dev mode assertion: verify counter matches rendered count
-        if (process.env.NODE_ENV !== 'production') {
+        // Use window.__DEV__ or assume dev if not explicitly in production
+        const isDevMode = typeof window !== 'undefined' && (window.__DEV__ !== false);
+        if (isDevMode) {
             const renderedCount = taskList.children.length;
             if (colTasks.length !== renderedCount) {
                 console.warn(
