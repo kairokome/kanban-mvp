@@ -267,9 +267,17 @@ curl -X POST http://localhost:3000/api/cards/abc123/transition \
 2. **Agents cannot modify unassigned tasks** — Only Founder can modify tasks without an owner
 3. **Claim requirement** — Agents must claim unassigned tasks via `/api/tasks/:id/claim` before moving them
 
-## 🔧 Manager Poller (Discord Notifications)
+## 📊 Executive Summary Poller (Discord Notifications)
 
-The manager poller periodically fetches tasks from "Agent Inbox" and "Review" columns and posts summaries to Discord.
+The manager poller posts clean executive-level Kanban summaries to Discord. Designed for founders to identify bottlenecks instantly.
+
+### Features
+
+- **Single-message summary** — All key metrics in one embed
+- **Counts at a glance** — Total, Inbox, Ongoing, Review, Done Today, Overdue
+- **Priority sections** — Manager tasks, Founder review queue, Overdue items
+- **Visual alerts** — Red embed when overdue tasks exist
+- **Empty state handling** — Gracefully handles zero-task scenarios
 
 ### Configuration
 
@@ -284,6 +292,9 @@ POLL_INTERVAL_SECONDS=300
 
 # Kanban API base URL (default: http://localhost:3000)
 KANBAN_BASE_URL=http://localhost:3000
+
+# Manager agent ID (default: manager)
+MANAGER_AGENT_ID=manager
 ```
 
 ### Getting a Discord Webhook
@@ -298,20 +309,67 @@ KANBAN_BASE_URL=http://localhost:3000
 # Start continuous polling (every 5 minutes)
 npm run poller
 
-# Send a test message to verify Discord connectivity
+# Send a test summary to verify Discord connectivity
 npm run poller:test
 ```
 
-### Output
+### Executive Summary Format
 
-The poller sends a summary to Discord showing:
-- **Agent Inbox** — Tasks waiting to be picked up
-- **Review** — Tasks awaiting review
+The summary displays in Discord as:
 
-Each embed includes:
-- Task count and overdue count
-- Top 5 tasks (priority, due date, owner)
-- Overdue tasks highlighted in red
+```
+📊 Kanban Executive Summary
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Total: 12 | Inbox: 3 | Ongoing: 5 | Review: 2 | Done Today: 2 | ⚠️ Overdue: 2
+
+🔄 Manager Tasks (Inbox)
+🔴 Review Q4 Budget (Feb 11 ⚠️ OVERDUE)
+🔴 Approve Vendor Contract (Feb 10 ⚠️ OVERDUE)
+🟡 Team Performance Review (Feb 13)
+
+👀 Waiting for Founder (Review)
+🔴 Marketing Campaign Proposal (Feb 15)
+🟡 Product Roadmap v2.0 (Feb 18)
+
+⚠️ Overdue Tasks
+🔴 Q1 Planning Document (Feb 8)
+🔴 Compliance Audit Response (Feb 2)
+```
+
+**Key indicators:**
+- 🔴 High priority | 🟡 Medium priority | 🟢 Low priority
+- ⚠️ OVERDUE suffix on past-due tasks
+- **Red embed** when overdue tasks exist
+- **Green embed** when board is clear
+- **Blue embed** (default) for normal operation
+
+### Example Discord Output
+
+```
+📊 Kanban Executive Summary
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Total: 8 | Inbox: 2 | Ongoing: 4 | Review: 1 | Done Today: 1 | ⚠️ Overdue: 1
+
+🔄 Manager Tasks (Inbox)
+🔴 Q1 Budget Review (Feb 15)
+🟡 Weekly Report (Feb 20)
+
+👀 Waiting for Founder (Review)
+🔴 Product Strategy v2 (Feb 18)
+
+⚠️ Overdue Tasks
+🔴 Compliance Audit (Feb 10)
+```
+
+When all clear:
+```
+📊 Kanban Executive Summary
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Total: 6 | Inbox: 0 | Ongoing: 3 | Review: 0 | Done Today: 3 | Overdue: 0
+
+✅ All Clear
+No tasks require attention. Board is up to date.
+```
 
 ### Docker Deployment
 
@@ -340,6 +398,7 @@ services:
       - AGENT_API_KEY=agent-secret-key
       - KANBAN_BASE_URL=http://kanban:3000
       - POLL_INTERVAL_SECONDS=300
+      - MANAGER_AGENT_ID=manager
     volumes:
       - ./kanban-mvp/poller.js:/app/poller.js:ro
 ```

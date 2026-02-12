@@ -1,22 +1,21 @@
 #!/usr/bin/env node
 
 /**
- * Kanban Manager Poller (Phase 1 + Phase 2)
+ * Kanban Manager Poller - Executive Summary Format
  * 
- * Phase 1: Periodically fetches tasks from Agent Inbox and Review columns,
- *          then posts a summary to Discord via webhook.
- * Phase 2: Auto-transitions manager-owned tasks from Agent Inbox → Ongoing
+ * Posts clean executive-level Kanban summaries to Discord.
  * 
  * Usage:
  *   node poller.js           # Run once
  *   npm run poller           # Run continuously (every 5 min)
+ *   npm run poller:test      # Send test summary
  * 
  * Environment Variables:
- *   DISCORD_WEBHOOK_URL    - Discord webhook URL (required)
- *   POLL_INTERVAL_SECONDS  - Poll interval in seconds (default: 300)
- *   KANBAN_BASE_URL        - Kanban API base URL (default: http://localhost:3000)
- *   AGENT_API_KEY          - API key for Kanban API (required)
- *   MANAGER_AGENT_ID       - Manager agent ID (default: manager)
+ *   DISCORD_WEBHOOK_URL      - Discord webhook URL (required)
+ *   POLL_INTERVAL_SECONDS   - Poll interval in seconds (default: 300)
+ *   KANBAN_BASE_URL         - Kanban API base URL (default: http://localhost:3000)
+ *   AGENT_API_KEY           - API key for Kanban API (required)
+ *   MANAGER_AGENT_ID        - Manager agent ID (default: manager)
  */
 
 require('dotenv').config();
@@ -45,10 +44,10 @@ if (!AGENT_API_KEY) {
 // ============ Helper Functions ============
 
 /**
- * Fetch tasks from the Kanban API
+ * Fetch all tasks from the Kanban API
  */
-async function fetchTasks(status) {
-    const url = `${KANBAN_BASE_URL}/api/cards?status=${encodeURIComponent(status)}`;
+async function fetchAllTasks() {
+    const url = `${KANBAN_BASE_URL}/api/cards`;
     
     try {
         const response = await fetch(url, {
@@ -63,39 +62,8 @@ async function fetchTasks(status) {
 
         return await response.json();
     } catch (error) {
-        console.error(`❌ Failed to fetch ${status} tasks:`, error.message);
+        console.error('❌ Failed to fetch tasks:', error.message);
         return [];
-    }
-}
-
-/**
- * Transition a task to a new status (Phase 2 - Manager Auto-transition)
- * Uses Agent API: POST /api/cards/:id/transition
- */
-async function transitionTask(taskId, newStatus) {
-    const url = `${KANBAN_BASE_URL}/api/cards/${taskId}/transition`;
-    
-    try {
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'x-api-key': AGENT_API_KEY,
-                'x-agent-id': MANAGER_AGENT_ID,
-                'x-agent-role': MANAGER_ROLE,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ status: newStatus })
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ error: response.statusText }));
-            throw new Error(`HTTP ${response.status}: ${errorData.error || errorData.reason || response.statusText}`);
-        }
-
-        return { success: true };
-    } catch (error) {
-        console.error(`❌ Failed to transition task ${taskId}:`, error.message);
-        return { success: false, error: error.message };
     }
 }
 
@@ -108,9 +76,19 @@ function isOverdue(dueDate) {
 }
 
 /**
- * Format a task for Discord embed
+ * Check if task was completed today
  */
-function formatTask(task) {
+function isDoneToday(dueDate) {
+    if (!dueDate) return false;
+    const doneDate = new Date(dueDate);
+    const today = new Date();
+    return doneDate.toDateString() === today.toDateString();
+}
+
+/**
+ * Format a task for Discord (compact, one line)
+ */
+function formatTaskCompact(task) {
     const priorityEmoji = {
         'High': '🔴',
         'Medium': '🟡',
@@ -119,79 +97,123 @@ function formatTask(task) {
 
     const dueDate = task.due_date 
         ? new Date(task.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-        : 'No due date';
+        : 'no due';
     
     const overdue = isOverdue(task.due_date);
-    const overduePrefix = overdue ? '⚠️ **OVERDUE** - ' : '';
+    const overdueSuffix = overdue ? ' ⚠️ OVERDUE' : '';
 
-    return `${priorityEmoji} **${task.title}**
-    > Priority: ${task.priority} | Due: ${overduePrefix}${dueDate}
-    > Owner: ${task.owner_agent || 'Unassigned'}
-    > ID: \`${task.id}\``;
+    return `${priorityEmoji} **${task.title}** (${dueDate}${overdueSuffix})`;
 }
 
 /**
- * Build the Discord embed payload
+ * Build executive summary embed
  */
-function buildEmbed(tasks, status, title) {
-    const total = tasks.length;
-    const overdue = tasks.filter(t => isOverdue(t.due_date)).length;
-    
-    // Sort tasks: overdue first, then by priority, then by due date
-    const sorted = [...tasks].sort((a, b) => {
-        // Overdue first
-        const aOverdue = isOverdue(a.due_date);
-        const bOverdue = isOverdue(b.due_date);
-        if (aOverdue && !bOverdue) return -1;
-        if (!aOverdue && bOverdue) return 1;
-        
-        // Then by priority
-        const priorityOrder = { 'High': 0, 'Medium': 1, 'Low': 2 };
-        const pa = priorityOrder[a.priority] || 3;
-        const pb = priorityOrder[b.priority] || 3;
-        if (pa !== pb) return pa - pb;
-        
-        // Then by due date
-        if (a.due_date && b.due_date) {
-            return new Date(a.due_date) - new Date(b.due_date);
-        }
-        return a.due_date ? -1 : 1;
-    });
+function buildExecutiveSummary(data) {
+    const { totals, managerInbox, review, overdue } = data;
+    const hasOverdue = overdue.length > 0;
 
-    // Take top 5 tasks
-    const topTasks = sorted.slice(0, 5);
-    const extraCount = total - 5;
-    const extraText = extraCount > 0 ? `\n_${extraCount} more tasks..._` : '';
+    // Build counts line
+    let countsLine = `**Total:** ${totals.total} | **Inbox:** ${totals.inbox} | **Ongoing:** ${totals.ongoing} | **Review:** ${totals.review}`;
+    if (totals.doneToday > 0) {
+        countsLine += ` | **Done Today:** ${totals.doneToday}`;
+    }
+    if (totals.overdue > 0) {
+        countsLine += ` | ⚠️ **Overdue:** ${totals.overdue}`;
+    }
 
-    const tasksList = topTasks.map((t, i) => 
-        `**${i + 1}.** ${formatTask(t)}`
-    ).join('\n\n');
+    // Color based on status
+    let embedColor = 0x55AAFF; // Blue - normal
+    if (hasOverdue) {
+        embedColor = 0xFF5555; // Red - overdue issues
+    } else if (totals.doneToday > 0 && totals.ongoing === 0 && totals.inbox === 0 && totals.review === 0) {
+        embedColor = 0x55FF55; // Green - all clear
+    }
 
-    return {
-        title: `${title} (${total} total${overdue > 0 ? `, ${overdue} overdue` : ''})`,
-        description: tasksList + extraText,
-        color: overdue > 0 ? 0xFF5555 : (status === 'Review' ? 0x55AAFF : 0x55FF55),
+    const embed = {
+        title: `📊 Kanban Executive Summary`,
+        description: countsLine,
+        color: embedColor,
+        fields: [],
         footer: {
-            text: `Kanban Poller | ${new Date().toLocaleString()}`
+            text: `Updated: ${new Date().toLocaleString()}`
         }
     };
+
+    // Manager-owned tasks in Agent Inbox (max 3)
+    if (managerInbox.length > 0) {
+        const topManager = managerInbox.slice(0, 3);
+        const extra = managerInbox.length - 3;
+        const extraText = extra > 0 ? `\n_${extra} more..._` : '';
+        
+        embed.fields.push({
+            name: '🔄 Manager Tasks (Inbox)',
+            value: topManager.map(t => formatTaskCompact(t)).join('\n') + extraText,
+            inline: false
+        });
+    }
+
+    // Tasks waiting for Founder (Review) (max 3)
+    if (review.length > 0) {
+        const topReview = review.slice(0, 3);
+        const extra = review.length - 3;
+        const extraText = extra > 0 ? `\n_${extra} more..._` : '';
+        
+        embed.fields.push({
+            name: '👀 Waiting for Founder (Review)',
+            value: topReview.map(t => formatTaskCompact(t)).join('\n') + extraText,
+            inline: false
+        });
+    }
+
+    // Overdue tasks (max 3)
+    if (overdue.length > 0) {
+        const topOverdue = overdue.slice(0, 3);
+        const extra = overdue.length - 3;
+        const extraText = extra > 0 ? `\n_${extra} more overdue..._` : '';
+        
+        embed.fields.push({
+            name: '⚠️ Overdue Tasks',
+            value: topOverdue.map(t => formatTaskCompact(t)).join('\n') + extraText,
+            inline: false
+        });
+    }
+
+    // Empty state
+    if (managerInbox.length === 0 && review.length === 0 && overdue.length === 0) {
+        embed.fields.push({
+            name: '✅ All Clear',
+            value: 'No tasks require attention. Board is up to date.',
+            inline: false
+        });
+    }
+
+    return embed;
 }
 
 /**
  * Send embed to Discord webhook
  */
-async function sendToDiscord(embeds) {
+async function sendToDiscord(embed) {
     try {
+        const payload = {
+            username: 'Kanban Manager',
+            avatar_url: 'https://cdn-icons-png.flaticon.com/512/2693/2693507.png',
+            embeds: [embed]
+        };
+
+        console.log('📤 Sending executive summary to Discord...');
+        console.log('   Summary payload:', JSON.stringify({
+            title: embed.title,
+            fieldsCount: embed.fields.length,
+            color: embed.color.toString(16)
+        }, null, 2));
+
         const response = await fetch(DISCORD_WEBHOOK_URL, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({
-                username: 'Kanban Manager',
-                avatar_url: 'https://cdn-icons-png.flaticon.com/512/2693/2693507.png',
-                embeds: embeds
-            })
+            body: JSON.stringify(payload)
         });
 
         if (!response.ok) {
@@ -199,7 +221,7 @@ async function sendToDiscord(embeds) {
             throw new Error(`HTTP ${response.status}: ${error}`);
         }
 
-        console.log('✅ Sent summary to Discord');
+        console.log('✅ Executive summary sent to Discord');
         return true;
     } catch (error) {
         console.error('❌ Failed to send to Discord:', error.message);
@@ -208,109 +230,124 @@ async function sendToDiscord(embeds) {
 }
 
 /**
- * Send a test message to Discord (for verification)
+ * Generate test executive summary
  */
-async function sendTestMessage() {
-    const embed = {
-        title: '🧪 Poller Test Message',
-        description: 'This is a test message from the Kanban Poller.\n\nThe poller is configured correctly and ready to send regular updates.',
-        color: 0x55AAFF,
-        footer: {
-            text: `Test sent at ${new Date().toLocaleString()}`
-        }
+function generateTestSummary() {
+    const testData = {
+        totals: {
+            total: 12,
+            inbox: 3,
+            ongoing: 5,
+            review: 2,
+            doneToday: 2,
+            overdue: 2
+        },
+        managerInbox: [
+            { id: 'test-1', title: 'Review Q4 Budget', priority: 'High', due_date: new Date(Date.now() - 86400000).toISOString() },
+            { id: 'test-2', title: 'Approve Vendor Contract', priority: 'High', due_date: new Date(Date.now() - 172800000).toISOString() },
+            { id: 'test-3', title: 'Team Performance Review', priority: 'Medium', due_date: new Date(Date.now() + 86400000).toISOString() },
+            { id: 'test-4', title: 'Update Policy Docs', priority: 'Low', due_date: null }
+        ],
+        review: [
+            { id: 'test-5', title: 'Marketing Campaign Proposal', priority: 'High', due_date: new Date(Date.now() + 172800000).toISOString() },
+            { id: 'test-6', title: 'Product Roadmap v2.0', priority: 'Medium', due_date: new Date(Date.now() + 259200000).toISOString() }
+        ],
+        overdue: [
+            { id: 'test-7', title: 'Q1 Planning Document', priority: 'High', due_date: new Date(Date.now() - 259200000).toISOString() },
+            { id: 'test-8', title: 'Compliance Audit Response', priority: 'High', due_date: new Date(Date.now() - 432000000).toISOString() }
+        ]
     };
 
-    console.log('📤 Sending test message to Discord...');
-    return sendToDiscord([embed]);
+    return buildExecutiveSummary(testData);
 }
 
 /**
- * Main poll function - fetches, auto-transitions (Phase 2), and posts summary
+ * Main poll function - fetches data and posts executive summary
  */
 async function poll() {
-    console.log(`\n🕐 [${new Date().toISOString()}] Polling Kanban...`);
+    console.log(`\n🕐 [${new Date().toISOString()}] Generating Executive Summary...`);
 
-    // Fetch tasks from both statuses
-    const [agentInboxTasks, reviewTasks] = await Promise.all([
-        fetchTasks('Agent Inbox'),
-        fetchTasks('Review')
-    ]);
+    // Fetch all tasks
+    const allTasks = await fetchAllTasks();
+    console.log(`   - Total tasks fetched: ${allTasks.length}`);
 
-    console.log(`   - Agent Inbox: ${agentInboxTasks.length} tasks`);
-    console.log(`   - Review: ${reviewTasks.length} tasks`);
-
-    // ============ Phase 2: Manager Auto-Transition ============
-    // Only transition tasks where:
-    //   - status == "Agent Inbox"
-    //   - owner_agent == MANAGER_AGENT_ID
-    //   - assignee == MANAGER_AGENT_ID (safety check)
-    // Transition: Agent Inbox → Ongoing
-    // NEVER touch: Review, Done, Worker-owned, Founder-owned tasks
-    if (agentInboxTasks.length > 0) {
-        const managerTasks = agentInboxTasks.filter(task => 
-            task.owner_agent === MANAGER_AGENT_ID && 
-            (task.assignee === MANAGER_AGENT_ID || !task.assignee)
-        );
-
-        if (managerTasks.length > 0) {
-            console.log(`\n🔄 [Phase 2] Manager Auto-Transition: ${managerTasks.length} tasks`);
-            
-            let transitioned = 0;
-            let failed = 0;
-
-            for (const task of managerTasks) {
-                console.log(`   - Processing: ${task.title} (${task.id})`);
-                
-                const result = await transitionTask(task.id, 'Ongoing');
-                
-                if (result.success) {
-                    console.log(`   ✅ [Manager Auto] Task ${task.id} moved Agent Inbox → Ongoing`);
-                    transitioned++;
-                } else {
-                    console.log(`   ❌ [Manager Auto] Task ${task.id} transition failed: ${result.error}`);
-                    failed++;
-                }
-
-                // Small delay to avoid rate limiting
-                await new Promise(resolve => setTimeout(resolve, 100));
-            }
-
-            console.log(`   📊 Phase 2 Summary: ${transitioned} transitioned, ${failed} failed`);
-        }
-    }
-    // ===========================================================
-
-    if (agentInboxTasks.length === 0 && reviewTasks.length === 0) {
-        console.log('📭 No tasks found in monitored columns');
+    if (allTasks.length === 0) {
+        console.log('📭 No tasks found');
+        const emptyEmbed = buildExecutiveSummary({
+            totals: { total: 0, inbox: 0, ongoing: 0, review: 0, doneToday: 0, overdue: 0 },
+            managerInbox: [],
+            review: [],
+            overdue: []
+        });
+        await sendToDiscord(emptyEmbed);
         return;
     }
 
-    // Build embeds (only include tasks that weren't just transitioned)
-    const embeds = [];
+    // Categorize tasks
+    const totals = {
+        total: allTasks.length,
+        inbox: allTasks.filter(t => t.status === 'Agent Inbox').length,
+        ongoing: allTasks.filter(t => t.status === 'Ongoing').length,
+        review: allTasks.filter(t => t.status === 'Review').length,
+        doneToday: allTasks.filter(t => t.status === 'Done' && isDoneToday(t.updated_at || t.due_date)).length,
+        overdue: allTasks.filter(t => isOverdue(t.due_date)).length
+    };
 
-    // Re-fetch Agent Inbox to get updated state after transitions
-    if (agentInboxTasks.length > 0) {
-        const updatedAgentInbox = await fetchTasks('Agent Inbox');
-        if (updatedAgentInbox.length > 0) {
-            embeds.push(buildEmbed(updatedAgentInbox, 'Agent Inbox', '📥 Agent Inbox'));
-        }
-    }
+    const managerInbox = allTasks.filter(t => 
+        t.status === 'Agent Inbox' && 
+        t.owner_agent === MANAGER_AGENT_ID
+    ).sort((a, b) => {
+        // Sort: overdue first, then by priority
+        const aOverdue = isOverdue(a.due_date);
+        const bOverdue = isOverdue(b.due_date);
+        if (aOverdue && !bOverdue) return -1;
+        if (!aOverdue && bOverdue) return 1;
+        const priorityOrder = { 'High': 0, 'Medium': 1, 'Low': 2 };
+        return (priorityOrder[a.priority] || 3) - (priorityOrder[b.priority] || 3);
+    });
 
-    if (reviewTasks.length > 0) {
-        embeds.push(buildEmbed(reviewTasks, 'Review', '🔍 Review'));
-    }
+    const review = allTasks.filter(t => 
+        t.status === 'Review'
+    ).sort((a, b) => {
+        const aOverdue = isOverdue(a.due_date);
+        const bOverdue = isOverdue(b.due_date);
+        if (aOverdue && !bOverdue) return -1;
+        if (!aOverdue && bOverdue) return 1;
+        const priorityOrder = { 'High': 0, 'Medium': 1, 'Low': 2 };
+        return (priorityOrder[a.priority] || 3) - (priorityOrder[b.priority] || 3);
+    });
 
-    // Send to Discord
-    await sendToDiscord(embeds);
+    const overdue = allTasks.filter(t => 
+        isOverdue(t.due_date)
+    ).sort((a, b) => {
+        // Most overdue first
+        return new Date(a.due_date) - new Date(b.due_date);
+    });
+
+    console.log(`   - Inbox: ${totals.inbox} | Ongoing: ${totals.ongoing} | Review: ${totals.review} | Done Today: ${totals.doneToday} | Overdue: ${totals.overdue}`);
+    console.log(`   - Manager Inbox: ${managerInbox.length} | Review (Founder): ${review.length} | Overdue: ${overdue.length}`);
+
+    // Build and send executive summary
+    const summary = buildExecutiveSummary({ totals, managerInbox, review, overdue });
+    await sendToDiscord(summary);
 }
 
 /**
  * Run as test mode
  */
 async function runTest() {
-    console.log('🧪 Kanban Poller - Test Mode\n');
+    console.log('🧪 Kanban Poller - Executive Summary Test Mode\n');
     
-    const success = await sendTestMessage();
+    const testEmbed = generateTestSummary();
+    
+    console.log('📤 Sending test executive summary to Discord...');
+    console.log('   Test payload:', JSON.stringify({
+        title: testEmbed.title,
+        fieldsCount: testEmbed.fields.length,
+        color: testEmbed.color.toString(16)
+    }, null, 2));
+    
+    const success = await sendToDiscord(testEmbed);
     
     if (success) {
         console.log('\n✅ Test completed successfully!');
@@ -334,14 +371,12 @@ async function main() {
         return;
     }
 
-    console.log('🚀 Kanban Manager Poller Started (Phase 1 + Phase 2)');
+    console.log('🚀 Kanban Executive Summary Poller Started');
     console.log(`   Base URL: ${KANBAN_BASE_URL}`);
     console.log(`   Poll Interval: ${POLL_INTERVAL_SECONDS}s`);
     console.log(`   Webhook: ${DISCORD_WEBHOOK_URL ? '✅ Configured' : '❌ Missing'}`);
     console.log(`   API Key: ${AGENT_API_KEY ? '✅ Configured' : '❌ Missing'}`);
     console.log(`   Manager Agent: ${MANAGER_AGENT_ID}`);
-    console.log(`   Phase 2 Auto-Transition: ✅ Enabled`);
-    console.log(`   Governance: Review → Done restricted to Founder only`);
     console.log('');
     
     // Run immediately on start
@@ -349,7 +384,7 @@ async function main() {
 
     // Then poll on interval
     const intervalMs = POLL_INTERVAL_SECONDS * 1000;
-    console.log(`\n⏳ Next poll in ${POLL_INTERVAL_SECONDS} seconds...`);
+    console.log(`\n⏳ Next summary in ${POLL_INTERVAL_SECONDS} seconds...`);
     
     setInterval(async () => {
         await poll();
@@ -357,7 +392,7 @@ async function main() {
 }
 
 // Export for testing
-module.exports = { fetchTasks, transitionTask, buildEmbed, sendToDiscord, poll };
+module.exports = { fetchAllTasks, buildExecutiveSummary, sendToDiscord, poll };
 
 // Run if called directly
 if (require.main === module) {
