@@ -203,11 +203,18 @@ function logout() {
     renderBoard();
 }
 
-// Update stats
+// Helper: Get filtered tasks (same source of truth as renderBoard)
+function getFilteredTasks() {
+    const isMyTasksView = currentView === 'my';
+    return isMyTasksView ? tasks.filter(t => isMyTask(t)) : tasks;
+}
+
+// Update stats - must derive from exact same filtered dataset used to render columns
 function updateStats() {
-    const total = tasks.length;
-    const done = tasks.filter(t => t.status === 'Done').length;
-    const overdue = tasks.filter(t => {
+    const filteredTasks = getFilteredTasks();
+    const total = filteredTasks.length;
+    const done = filteredTasks.filter(t => t.status === 'Done').length;
+    const overdue = filteredTasks.filter(t => {
         if (!t.due_date || t.status === 'Done') return false;
         return new Date(t.due_date) < new Date();
     }).length;
@@ -304,6 +311,24 @@ function renderBoard() {
                     `view="${isMyTasksView ? 'My Tasks' : 'All'}"`,
                     { allColTasks: allColTasks.length, colTasks }
                 );
+            }
+        }
+
+        // Dev mode assertion: verify header count matches total rendered cards
+        if (isDevMode) {
+            const headerTotalEl = document.getElementById('stat-total');
+            if (headerTotalEl) {
+                // Extract number from "X task(s)" format
+                const headerText = headerTotalEl.textContent;
+                const headerCount = parseInt(headerText) || 0;
+                const totalRendered = board.querySelectorAll('.task-card').length;
+                const filteredTasks = getFilteredTasks();
+                if (headerCount !== totalRendered) {
+                    console.warn(
+                        `[Dev] Header count mismatch: header="${headerCount}", rendered="${totalRendered}", filtered="${filteredTasks.length}"`,
+                        { totalRendered, filteredTasks }
+                    );
+                }
             }
         }
 
@@ -884,10 +909,9 @@ function showNotification(message) {
     setTimeout(() => notif.remove(), 3000);
 }
 
-// Version info
-function displayVersion() {
+// Version info - fetch from backend to ensure consistency
+async function displayVersion() {
     const footer = document.getElementById('app-version');
-    const version = '0.1.0';
     const commit = document.body.getAttribute('data-commit') || 'local';
     const deployTime = document.body.getAttribute('data-deploy-time') || new Date().toISOString();
     
@@ -897,8 +921,22 @@ function displayVersion() {
         hour: '2-digit',
         minute: '2-digit'
     });
-    
-    footer.textContent = `v${version} · ${commit} · ${formattedDate}`;
+
+    try {
+        const res = await fetch('/api/version', { 
+            cache: 'no-store',
+            headers: { 'Cache-Control': 'no-cache' }
+        });
+        if (res.ok) {
+            const data = await res.json();
+            footer.textContent = `v${data.version} · ${commit} · ${formattedDate}`;
+        } else {
+            footer.textContent = `v? · ${commit} · ${formattedDate}`;
+        }
+    } catch (err) {
+        console.error('Failed to fetch version:', err);
+        footer.textContent = `v? · ${commit} · ${formattedDate}`;
+    }
 }
 
 // Health check
@@ -914,8 +952,8 @@ function checkHealth() {
 }
 
 // Initial load
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     checkStoredAuth();
-    displayVersion();
+    await displayVersion();
     checkHealth();
 });
