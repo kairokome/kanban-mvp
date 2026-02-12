@@ -448,16 +448,16 @@ function claimTask(taskId) {
 }
 
 // Add/Edit Task
-function showAddTask() {
+async function showAddTask() {
     resetFormState();
     document.getElementById('modal-title').textContent = 'Add Task';
     document.getElementById('task-form').reset();
     document.getElementById('task-id').value = '';
-    populateOwnerAgentDropdown('');
+    await populateOwnerAgentDropdown('');
     document.getElementById('task-modal').classList.remove('hidden');
 }
 
-function editTask(id) {
+async function editTask(id) {
     const task = tasks.find(t => t.id === id);
     if (!task) return;
 
@@ -476,7 +476,7 @@ function editTask(id) {
     // New fields
     const ownerAgentEl = document.getElementById('task-owner-agent');
     if (ownerAgentEl) {
-        populateOwnerAgentDropdown(task.owner_agent || '');
+        await populateOwnerAgentDropdown(task.owner_agent || '');
     }
 
     const branchEl = document.getElementById('task-branch');
@@ -489,38 +489,91 @@ function editTask(id) {
 }
 
 // Populate owner agent dropdown with available agents
-function populateOwnerAgentDropdown(selectedValue) {
+async function populateOwnerAgentDropdown(selectedValue) {
+    const container = document.getElementById('task-owner-agent-container');
     const selectEl = document.getElementById('task-owner-agent');
+    
     if (!selectEl) return;
 
-    // Save current selection if any
-    const currentSelection = selectEl.value;
+    // Always add "Unassigned" as first option
+    const agents = ['Unassigned'];
 
-    // Clear existing options (except "Unassigned")
-    selectEl.innerHTML = '<option value="">Unassigned</option>';
-
-    // Get agent ID from agentIdentity or localStorage
-    const agentId = agentIdentity.agentId || localStorage.getItem('agentId') || '';
-    const agentRole = agentIdentity.agentRole || localStorage.getItem('agentRole') || 'member';
-
-    // Only show current agent as option if role is agent or founder
-    if ((agentRole === 'agent' || agentRole === 'founder') && agentId) {
-        const option = document.createElement('option');
-        option.value = agentId;
-        option.textContent = `${agentId} (You)`;
-        selectEl.appendChild(option);
+    // Fetch agents from API
+    try {
+        const res = await apiFetch('/api/agents');
+        if (res.ok) {
+            const data = await res.json();
+            if (data.agents && Array.isArray(data.agents)) {
+                // Add agents from API, excluding "Unassigned" if already in list
+                data.agents.forEach(agent => {
+                    if (agent && agent !== 'Unassigned' && !agents.includes(agent)) {
+                        agents.push(agent);
+                    }
+                });
+            }
+        }
+    } catch (err) {
+        console.error('Failed to fetch agents:', err);
+        // Fallback: add current user as agent if API fails
+        const agentId = agentIdentity.agentId || localStorage.getItem('agentId') || '';
+        const agentRole = agentIdentity.agentRole || localStorage.getItem('agentRole') || 'member';
+        if ((agentRole === 'agent' || agentRole === 'founder') && agentId) {
+            if (!agents.includes(agentId)) {
+                agents.push(agentId);
+            }
+        }
     }
 
-    // Try to restore previous selection
-    if (currentSelection && currentSelection !== selectedValue) {
-        // If there was a user selection, preserve it
-        const prevOption = document.createElement('option');
-        prevOption.value = currentSelection;
-        prevOption.textContent = currentSelection;
-        selectEl.appendChild(prevOption);
-        selectEl.value = currentSelection;
+    // If only "Unassigned" exists, render as static field (not dropdown)
+    if (agents.length === 1 && agents[0] === 'Unassigned') {
+        // Replace select with static text
+        selectEl.style.display = 'none';
+        
+        // Check if static element exists, create if not
+        let staticEl = container.querySelector('.owner-agent-static');
+        if (!staticEl) {
+            staticEl = document.createElement('div');
+            staticEl.className = 'owner-agent-static text-gray-700 font-medium';
+            staticEl.style.cssText = 'padding: 0.5rem 0.75rem; background: #f3f4f6; border-radius: 0.375rem; border: 1px solid #d1d5db;';
+            selectEl.parentNode.insertBefore(staticEl, selectEl);
+        }
+        staticEl.textContent = 'Unassigned';
+        staticEl.style.display = 'block';
+        
+        // Set hidden input value
+        selectEl.value = '';
     } else {
-        selectEl.value = selectedValue;
+        // Multiple options - render as dropdown
+        let staticEl = container.querySelector('.owner-agent-static');
+        if (staticEl) {
+            staticEl.style.display = 'none';
+        }
+        
+        selectEl.style.display = 'block';
+        
+        // Clear and populate options
+        selectEl.innerHTML = '';
+        
+        agents.forEach(agent => {
+            const option = document.createElement('option');
+            if (agent === 'Unassigned') {
+                option.value = '';
+                option.textContent = 'Unassigned';
+            } else {
+                option.value = agent;
+                option.textContent = agent === (agentIdentity.agentId || localStorage.getItem('agentId')) 
+                    ? `${agent} (You)` 
+                    : agent;
+            }
+            selectEl.appendChild(option);
+        });
+
+        // Set selection
+        if (selectedValue) {
+            selectEl.value = selectedValue;
+        } else {
+            selectEl.value = '';
+        }
     }
 }
 
