@@ -183,6 +183,15 @@ function loadTasks() {
     .then(data => {
         tasks = data;
         updateStats();
+        
+        // Update view tab counts (single source of truth)
+        const allCount = tasks.length;
+        const myCount = tasks.filter(t => isMyTask(t)).length;
+        const allTab = document.getElementById('view-all');
+        const myTab = document.getElementById('view-my');
+        if (allTab) allTab.textContent = `All (${allCount})`;
+        if (myTab) myTab.textContent = `My Tasks (${myCount})`;
+        
         renderBoard();
     })
     .catch(err => {
@@ -225,7 +234,7 @@ function updateStats() {
     document.getElementById('stat-overdue').classList.toggle('hidden', overdue === 0);
 }
 
-// View filter
+// View filter with inline counts
 function switchView(view) {
     currentView = view;
     document.getElementById('view-all').className = view === 'all' 
@@ -234,6 +243,15 @@ function switchView(view) {
     document.getElementById('view-my').className = view === 'my'
         ? 'px-3 py-1 text-sm rounded-md font-medium transition bg-white text-gray-900 shadow-sm'
         : 'px-3 py-1 text-sm rounded-md font-medium transition text-gray-500 hover:text-gray-700';
+    
+    // Get counts for both views
+    const allCount = tasks.length;
+    const myCount = tasks.filter(t => isMyTask(t)).length;
+    
+    // Update tab text with inline counts (single source of truth)
+    document.getElementById('view-all').textContent = `All (${allCount})`;
+    document.getElementById('view-my').textContent = `My Tasks (${myCount})`;
+    
     renderBoard();
 }
 
@@ -275,16 +293,13 @@ function renderBoard() {
         globalCount += colTasks.length;
     });
 
-    // Update global task pill - derived from column counts (single source of truth)
-    const pillEl = document.getElementById('global-task-pill');
-    if (pillEl) {
-        pillEl.textContent = `${globalCount} task${globalCount !== 1 ? 's' : ''}`;
-        if (globalCount > 0) {
-            pillEl.classList.remove('hidden');
-        } else {
-            pillEl.classList.add('hidden');
-        }
-    }
+    // Update view tabs with counts (single source of truth for UI)
+    const allCount = tasks.length;
+    const myCount = tasks.filter(t => isMyTask(t)).length;
+    const allTab = document.getElementById('view-all');
+    const myTab = document.getElementById('view-my');
+    if (allTab) allTab.textContent = `All (${allCount})`;
+    if (myTab) myTab.textContent = `My Tasks (${myCount})`;
 
     // Dev-mode assertion: verify global count matches sum of column counts
     const isDevMode = typeof window !== 'undefined' && (window.__DEV__ !== false);
