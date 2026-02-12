@@ -1,14 +1,36 @@
+// Load environment variables FIRST - before any other code
+require('dotenv').config();
+
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
 const pkg = require('./package.json');
 
+// ============ Environment Validation ============
+const REQUIRED_ENV_VARS = ['AGENT_API_KEY', 'OWNER_PASSWORD'];
+const missingVars = [];
+
+for (const varName of REQUIRED_ENV_VARS) {
+    if (!process.env[varName]) {
+        missingVars.push(varName);
+    }
+}
+
+if (missingVars.length > 0) {
+    console.error('❌ Missing required environment variables:');
+    missingVars.forEach(v => console.error(`   - ${v}`));
+    console.error('Please copy .env.example to .env and fill in the values.');
+    process.exit(1);
+}
+
+console.log('✅ Environment validated');
+console.log('🤖 Agent API: ENABLED');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const DB_PATH = process.env.DB_PATH || './kanban.db';
-const OWNER_PASSWORD = process.env.OWNER_PASSWORD || 'kanban123';
+const OWNER_PASSWORD = process.env.OWNER_PASSWORD;
 
 // Middleware
 app.use(express.json());

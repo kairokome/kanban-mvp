@@ -48,7 +48,55 @@ npm run dev
 
 See [Deployment Guide](#render-deployment) below.
 
-## 🔐 Authentication
+## ✅ Verification Checklist (One-Command Test)
+
+Run these commands to verify the deployment:
+
+```bash
+# 1. Install dependencies
+npm install
+
+# 2. Copy environment file and set required values
+cp .env.example .env
+
+# 3. Start development server
+npm run dev &
+sleep 3
+
+# 4. Verify Agent API works (returns 200)
+curl -s -o /dev/null -w "%{http_code}" -H "x-api-key: agent-secret-key-12345" http://localhost:3000/api/cards
+
+# Expected output: 200
+
+# 5. Verify no auth returns 401
+curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/api/cards
+
+# Expected output: 401
+
+# 6. Kill the dev server
+pkill -f "node server.js"
+```
+
+### Expected Startup Output
+
+When running `npm run dev`, you should see:
+
+```
+✅ Environment validated
+🤖 Agent API: ENABLED
+🚀 Kanban MVP running on http://localhost:3000
+📁 Database: ./kanban.db
+🔐 Owner password: [masked]
+🛡️ Agent safety gates: ENABLED
+```
+
+### Troubleshooting
+
+| Symptom | Solution |
+|---------|----------|
+| "Missing required environment variables" | Run `cp .env.example .env` |
+| "Invalid or missing API key" (401) | Check `AGENT_API_KEY` in `.env` |
+| Server won't start | Check port 3000 is not in use |
 
 ### Web UI Authentication
 
