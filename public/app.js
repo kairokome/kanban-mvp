@@ -262,6 +262,39 @@ function renderBoard() {
     // Single source of truth: filter from current tasks state
     const isMyTasksView = currentView === 'my';
 
+    // Derive global count strictly from same array used to render columns
+    let columnCounts = {};
+    let globalCount = 0;
+
+    columns.forEach(col => {
+        const allColTasks = tasks.filter(t => t.status === col.id);
+        const colTasks = isMyTasksView 
+            ? allColTasks.filter(t => isMyTask(t))
+            : allColTasks;
+        columnCounts[col.id] = colTasks.length;
+        globalCount += colTasks.length;
+    });
+
+    // Update global task pill - derived from column counts (single source of truth)
+    const pillEl = document.getElementById('global-task-pill');
+    if (pillEl) {
+        pillEl.textContent = `${globalCount} task${globalCount !== 1 ? 's' : ''}`;
+        if (globalCount > 0) {
+            pillEl.classList.remove('hidden');
+        } else {
+            pillEl.classList.add('hidden');
+        }
+    }
+
+    // Dev-mode assertion: verify global count matches sum of column counts
+    const isDevMode = typeof window !== 'undefined' && (window.__DEV__ !== false);
+    if (isDevMode) {
+        const sumCounts = Object.values(columnCounts).reduce((a, b) => a + b, 0);
+        if (globalCount !== sumCounts) {
+            console.error(`[COUNT MISMATCH] globalCount=${globalCount}, sumCounts=${sumCounts}`);
+        }
+    }
+
     columns.forEach(col => {
         // Derive count strictly from tasks array - no cached/memoized counts
         const allColTasks = tasks.filter(t => t.status === col.id);

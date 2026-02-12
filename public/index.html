@@ -104,6 +104,8 @@
                             <button onclick="switchView('all')" id="view-all" class="px-3 py-1.5 text-sm rounded-md font-medium transition bg-white text-gray-900 shadow-sm">All</button>
                             <button onclick="switchView('my')" id="view-my" class="px-3 py-1.5 text-sm rounded-md font-medium transition text-gray-500 hover:text-gray-700">My Tasks</button>
                         </div>
+                        <!-- Global Task Pill - derived from same filtered data as columns -->
+                        <span id="global-task-pill" class="px-2 py-1 bg-indigo-100 text-indigo-700 text-xs rounded-full font-medium hidden flex-shrink-0">0 tasks</span>
                         <!-- Stats -->
                         <div class="flex items-center gap-2 text-sm flex-shrink-0">
                             <span class="px-3 py-1 bg-gray-100 rounded-full text-gray-600" id="stat-total">0</span>
