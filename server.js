@@ -236,8 +236,8 @@ function validateTransition(task, newStatus, agentInfo) {
     }
 
     // Check role restrictions
-    const role = (agentRole || '').toLowerCase();
-    if (rule.requiresFounder && role !== ROLES.FOUNDER) {
+    const actorRole = (agentRole || '').toLowerCase();
+    if (rule.requiresFounder && actorRole !== ROLES.FOUNDER) {
         return {
             allowed: false,
             reason: 'Only Founder can complete this transition'
@@ -247,7 +247,7 @@ function validateTransition(task, newStatus, agentInfo) {
     // Check ownership requirement (only assigned agent can move to certain statuses)
     if (rule.requiresOwnership) {
         const isOwner = task.owner_agent === agentId || task.assignee === agentId;
-        const isFounder = role === ROLES.FOUNDER;
+        const isFounder = actorRole === ROLES.FOUNDER;
         if (!isOwner && !isFounder) {
             return {
                 allowed: false,
