@@ -473,3 +473,119 @@ Built with:
 - [Tailwind CSS](https://tailwindcss.com)
 - [Express.js](https://expressjs.com)
 - [SQLite](https://www.sqlite.org)
+
+---
+
+## 🤖 Agent CLI Tool
+
+A standalone CLI for agents to interact with Kanban without UI.
+
+### Installation
+
+```bash
+# From project directory
+npm run link-cli
+
+# Or run directly
+node bin/agent-cli.js <command>
+```
+
+### Configuration
+
+Set environment variables or use CLI flags:
+
+```bash
+export AGENT_ID=manager
+export AGENT_ROLE=agent
+export AGENT_API_KEY=agent-secret-key-12345
+export KANBAN_BASE_URL=http://localhost:3000
+```
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `agent-cli list [--status=<status>]` | List all tasks (filter by status) |
+| `agent-cli get <task-id>` | Show task details |
+| `agent-cli claim <task-id>` | Claim an unassigned task |
+| `agent-cli move <task-id> <status>` | Move task to new status |
+| `agent-cli comment <task-id> <message>` | Add comment to task |
+| `agent-cli create --title="..."` | Create new task |
+| `agent-cli mine` | Show tasks assigned to you |
+| `agent-cli help` | Show help |
+
+### Examples
+
+```bash
+# List tasks in Agent Inbox
+agent-cli list --status="Agent Inbox"
+
+# List tasks in table format
+agent-cli list --format=table
+
+# Get task details
+agent-cli get abc123
+
+# Claim a task
+agent-cli claim abc123
+
+# Move task to Ongoing
+agent-cli move abc123 "Ongoing"
+
+# Add comment
+agent-cli comment abc123 "Starting work on this"
+
+# Create new task
+agent-cli create --title="Fix login bug" --priority=High
+
+# Show my tasks
+agent-cli mine --format=table
+
+# Use different agent credentials
+agent-cli list --agent-id=worker --agent-role=agent
+```
+
+### Global Options
+
+| Flag | Description |
+|------|-------------|
+| `--status=<status>` | Filter by status |
+| `--priority=<priority>` | Task priority (Low, Medium, High) |
+| `--owner=<agent-id>` | Task owner |
+| `--format=<json\|table>` | Output format |
+| `--agent-id=<id>` | Agent ID |
+| `--agent-role=<role>` | Agent role |
+| `--api-key=<key>` | API key |
+| `--base-url=<url>` | Kanban server URL |
+
+### Valid Status Values
+
+- `Agent Inbox` - New tasks awaiting assignment
+- `Ongoing` - Tasks actively being worked
+- `Review` - Tasks awaiting review
+- `Done` - Completed tasks
+- `Backlog` - Future tasks
+- `To Do` - Planned tasks
+
+### Automation Example
+
+```bash
+#!/bin/bash
+# Example: Process all tasks in Agent Inbox
+
+# Set agent credentials
+export AGENT_ID=worker
+export AGENT_ROLE=agent
+
+# Get all tasks in inbox
+TASKS=$(agent-cli list --status="Agent Inbox" --format=json)
+
+# Process each task
+echo "$TASKS" | jq -r '.[].id' | while read taskId; do
+    echo "Claiming $taskId..."
+    agent-cli claim "$taskId"
+    agent-cli move "$taskId" "Ongoing"
+    agent-cli comment "$taskId" "Auto-claimed and started"
+done
+```
+
