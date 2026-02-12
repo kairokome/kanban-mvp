@@ -230,6 +230,16 @@ function switchView(view) {
     renderBoard();
 }
 
+// Helper: Check if task belongs to current user (for "My Tasks" view)
+function isMyTask(task) {
+    // Task is "mine" if: no assignee, or assignee is 'Me'/'me', or matches localStorage user
+    const userId = localStorage.getItem('agentId') || '';
+    const assignee = task.assignee || '';
+    return !assignee || 
+           assignee.toLowerCase() === 'me' || 
+           assignee === userId;
+}
+
 // Render board
 function renderBoard() {
     const board = document.getElementById('board');
@@ -242,17 +252,22 @@ function renderBoard() {
         { id: 'Done', emoji: '✅' }
     ];
 
+    // Single source of truth: filter from current tasks state
+    const isMyTasksView = currentView === 'my';
+
     columns.forEach(col => {
+        // Derive count strictly from tasks array - no cached/memoized counts
         const allColTasks = tasks.filter(t => t.status === col.id);
-        const viewTasks = currentView === 'all' ? allColTasks : allColTasks.filter(t => t.assignee === 'Me' || t.assignee === 'me' || !t.assignee);
-        const colTasks = viewTasks;
+        const colTasks = isMyTasksView 
+            ? allColTasks.filter(t => isMyTask(t))
+            : allColTasks;
 
         const colDiv = document.createElement('div');
         colDiv.className = 'kanban-column rounded-xl p-3 flex flex-col h-full';
         colDiv.innerHTML = `
             <div class="flex items-center justify-between mb-3 flex-shrink-0">
                 <h2 class="font-semibold text-gray-700 text-sm uppercase tracking-wide flex items-center gap-1.5">${col.emoji} ${col.id}</h2>
-                <span class="px-2 py-0.5 bg-white/50 text-gray-600 text-xs rounded-full font-medium">${viewTasks.length}</span>
+                <span class="px-2 py-0.5 bg-white/50 text-gray-600 text-xs rounded-full font-medium">${colTasks.length}</span>
             </div>
             <div class="space-y-2 column flex-1 overflow-y-auto" data-status="${col.id}"></div>
         `;
@@ -272,9 +287,23 @@ function renderBoard() {
             moveTask(taskId, col.id);
         });
 
+        // Render tasks from the same filtered array used for counter
         colTasks.forEach(task => {
             taskList.appendChild(createTaskCard(task));
         });
+
+        // Dev mode assertion: verify counter matches rendered count
+        if (process.env.NODE_ENV !== 'production') {
+            const renderedCount = taskList.children.length;
+            if (colTasks.length !== renderedCount) {
+                console.warn(
+                    `[Dev] Counter mismatch in "${col.id}": ` +
+                    `counter=${colTasks.length}, rendered=${renderedCount}, ` +
+                    `view="${isMyTasksView ? 'My Tasks' : 'All'}"`,
+                    { allColTasks: allColTasks.length, colTasks }
+                );
+            }
+        }
 
         board.appendChild(colDiv);
     });
