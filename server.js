@@ -58,7 +58,15 @@ const agentAuthMiddleware = (req, res, next) => {
 
 // Agent identity extraction
 function getAgentIdentity(req) {
-    // Try x-agent-id first, fall back to assignee for backward compat
+    const password = req.headers['x-owner-password'];
+    const apiKey = req.headers['x-api-key'];
+    
+    // If using owner password, treat as Founder
+    if (password && password === OWNER_PASSWORD) {
+        return { agentId: 'owner', agentRole: 'founder', ip: req.ip || req.connection?.remoteAddress };
+    }
+    
+    // Otherwise extract from headers
     const agentId = req.headers['x-agent-id'] || req.headers['x-owner-password'] || 'unknown';
     const agentRole = req.headers['x-agent-role'] || 'member';
     return { agentId, agentRole, ip: req.ip || req.connection?.remoteAddress };

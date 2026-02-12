@@ -387,13 +387,19 @@ function moveTask(taskId, newStatus) {
                 logout();
                 return;
             }
+            if (res.status === 403) {
+                // Transition denied - show the reason
+                return res.json().then(errData => {
+                    throw new Error(errData.reason || 'Transition denied by safety gates');
+                });
+            }
             throw new Error('Failed to move task');
         }
         loadTasks();
     })
     .catch(err => {
         console.error('Move task error:', err);
-        showNotification('Error moving task');
+        showNotification('Error: ' + err.message);
     });
 }
 
