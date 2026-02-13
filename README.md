@@ -2,8 +2,6 @@
 
 A self-hosted Kanban board with SQLite persistence, drag-and-drop workflow, and REST API for agent automation.
 
-![Kanban Board](https://via.placeholder.com/800x400?text=Kanban+Board+MVP)
-
 ## ✨ Features
 
 | Feature | Description |
