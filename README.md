@@ -1,6 +1,6 @@
 # Kanban Board MVP
 
-A self-hosted Kanban board with SQLite persistence, drag-and-drop workflow, and REST API for agent automation.
+A self-hosted Kanban board with PostgreSQL/SQLite persistence, drag-and-drop workflow, and REST API for agent automation.
 
 ## ✨ Features
 
@@ -12,12 +12,12 @@ A self-hosted Kanban board with SQLite persistence, drag-and-drop workflow, and 
 | **🏷️ Priority Levels** | High, Medium, Low with color coding |
 | **📅 Due Dates** | Overdue detection and reminders |
 | **🤖 Agent API** | REST API for programmatic task management |
-| **💾 SQLite Persistence** | Data survives restarts |
+| **💾 Database Options** | PostgreSQL (recommended) or SQLite fallback |
 | **📱 Mobile Ready** | Works on phones and tablets |
 
 ## 🚀 Quick Start
 
-### Docker (Recommended)
+### Docker with PostgreSQL (Recommended)
 
 ```bash
 docker-compose up -d
@@ -25,58 +25,99 @@ docker-compose up -d
 # Default password: kanban123
 ```
 
-### Node.js
+### Docker with SQLite (Development)
+
+```bash
+# No DATABASE_URL = uses SQLite by default
+docker-compose -f docker-compose.sqlite.yml up -d
+```
+
+### Node.js (SQLite - Default)
 
 ```bash
 npm install
+npm run migrate
 npm run dev
 # Open http://localhost:3000
 ```
 
-### Render Deployment
+### Node.js with PostgreSQL
 
-#### Option 1: With Persistent Disk (Recommended)
+```bash
+export DATABASE_URL="postgresql://user:pass@localhost:5432/kanban"
+npm install
+npm run migrate:pg
+npm run dev
+```
+
+## 🐘 PostgreSQL Setup
+
+### Local PostgreSQL
+
+```bash
+# Using Docker
+docker run --name kanban-postgres \
+  -e POSTGRES_USER=kanban \
+  -e POSTGRES_PASSWORD=secret \
+  -e POSTGRES_DB=kanban \
+  -p 5432:5432 \
+  -v postgres_data:/var/lib/postgresql/data \
+  -d postgres:15-alpine
+
+# Set environment variable
+export DATABASE_URL="postgresql://kanban:secret@localhost:5432/kanban"
+
+# Run migrations
+npm run migrate:pg
+
+# Start the app
+npm run dev
+```
+
+### Render Deployment with Managed PostgreSQL
 
 1. Create a **Web Service** on Render
-2. Add a **Persistent Disk** (1GB recommended)
-   - Mount path: `/var/data`
-3. Configure environment variables:
+2. Create a **PostgreSQL** database in Render dashboard
+3. Add environment variables:
+   - `DATABASE_URL` → from Render PostgreSQL connection string
    - `OWNER_PASSWORD` → your secure password
    - `AGENT_API_KEY` → your agent API key
-   - `DB_PATH` → `/var/data/kanban.db`
    - `NODE_ENV` → `production`
 4. Build Command: `npm ci`
 5. Start Command: `node server.js`
 
-The app will automatically create the database directory if it doesn't exist.
+The `DATABASE_URL` takes precedence over SQLite. When set, the app automatically uses PostgreSQL.
 
-#### Option 2: Ephemeral (Development)
+### Render with External PostgreSQL
 
-For quick testing without a disk:
+For external PostgreSQL providers (Supabase, Neon, Railway, etc.):
 
-1. Create a **Web Service** on Render
-2. Environment variables:
-   - `OWNER_PASSWORD` → your password
-   - `AGENT_API_KEY` → your API key
-   - `DB_PATH` → `./kanban.db` (default)
-3. **Note:** Data will be lost on each deploy
+```
+DATABASE_URL=postgresql://user:password@host:5432/database?sslmode=require
+```
 
-**Production Disk Setup:**
+## 🗃️ SQLite Fallback
+
+If `DATABASE_URL` is not set, the app automatically falls back to SQLite.
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `DB_PATH` | No | `./kanban.db` | SQLite database path |
 
 ```bash
-# Render Dashboard Configuration:
-Disk Name: kanban-data
-Mount Path: /var/data
-Size: 1 GB
+# Custom SQLite path
+export DB_PATH=/var/data/kanban.db
+npm run dev
 ```
 
 ## 🔧 Environment Variables
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
+| `DATABASE_URL` | No | - | PostgreSQL connection string (uses PostgreSQL if set) |
+| `DB_PATH` | No | `./kanban.db` | SQLite database path (fallback when DATABASE_URL not set) |
 | `OWNER_PASSWORD` | Yes | - | Web UI password |
 | `AGENT_API_KEY` | Yes | - | API key for agent endpoints |
-| `DB_PATH` | No | `./kanban.db` | SQLite database path |
 | `PORT` | No | `3000` | Server port |
 
 ## 🌐 API Reference
@@ -136,6 +177,25 @@ curl -X POST http://localhost:3000/api/cards/:id/transition \
   -d '{"status": "Ongoing"}'
 ```
 
+## 🛠️ Migration
+
+### Run Migrations
+
+```bash
+# SQLite (default)
+npm run migrate
+
+# PostgreSQL
+npm run migrate:pg
+```
+
+### Migrate from SQLite to PostgreSQL
+
+1. Set up PostgreSQL database
+2. Set `DATABASE_URL` environment variable
+3. Run migrations: `npm run migrate:pg`
+4. (Optional) Manually transfer data if needed
+
 ## 🤖 Agent CLI
 
 ```bash
@@ -164,7 +224,7 @@ npm run poller
 ## 🛠️ Tech Stack
 
 - **Backend:** Express.js
-- **Database:** SQLite3
+- **Database:** PostgreSQL (default) or SQLite (fallback)
 - **Frontend:** Vanilla JS + Tailwind CSS
 - **Deployment:** Docker, Render
 
@@ -174,4 +234,4 @@ MIT
 
 ## 🙏 Credits
 
-Built with [Tailwind CSS](https://tailwindcss.com), [Express.js](https://expressjs.com), and [SQLite](https://www.sqlite.org).
+Built with [Tailwind CSS](https://tailwindcss.com), [Express.js](https://expressjs.com), and [PostgreSQL](https://www.postgresql.org).

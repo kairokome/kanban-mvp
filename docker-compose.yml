@@ -1,20 +1,40 @@
 version: '3.8'
 
 services:
-  kanban:
+  postgres:
+    image: postgres:15-alpine
+    container_name: kanban-postgres
+    environment:
+      POSTGRES_USER: kanban
+      POSTGRES_PASSWORD: kanban_secret
+      POSTGRES_DB: kanban
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kanban -d kanban"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
     build: .
+    container_name: kanban-app
+    environment:
+      DATABASE_URL: postgresql://kanban:kanban_secret@postgres:5432/kanban
+      OWNER_PASSWORD: kanban123
+      AGENT_API_KEY: agent-secret-key-change-in-production
+      PORT: 3000
+      NODE_ENV: development
     ports:
       - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
     volumes:
-      - ./data:/app/data
-    environment:
-      - OWNER_PASSWORD=kanban123
-      - DB_PATH=/app/data/kanban.db
-    restart: unless-stopped
+      - .:/app
+      - /app/node_modules
 
-  # Optional: Adminer for database inspection
-  adminer:
-    image: adminer
-    ports:
-      - "8080:8080"
-    restart: unless-stopped
+volumes:
+  postgres_data:
