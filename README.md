@@ -35,7 +35,40 @@ npm run dev
 
 ### Render Deployment
 
-See the [deployment guide](https://github.com/kairokome/kanban-mvp/wiki/Render-Deployment) in the wiki.
+#### Option 1: With Persistent Disk (Recommended)
+
+1. Create a **Web Service** on Render
+2. Add a **Persistent Disk** (1GB recommended)
+   - Mount path: `/var/data`
+3. Configure environment variables:
+   - `OWNER_PASSWORD` → your secure password
+   - `AGENT_API_KEY` → your agent API key
+   - `DB_PATH` → `/var/data/kanban.db`
+   - `NODE_ENV` → `production`
+4. Build Command: `npm ci`
+5. Start Command: `node server.js`
+
+The app will automatically create the database directory if it doesn't exist.
+
+#### Option 2: Ephemeral (Development)
+
+For quick testing without a disk:
+
+1. Create a **Web Service** on Render
+2. Environment variables:
+   - `OWNER_PASSWORD` → your password
+   - `AGENT_API_KEY` → your API key
+   - `DB_PATH` → `./kanban.db` (default)
+3. **Note:** Data will be lost on each deploy
+
+**Production Disk Setup:**
+
+```bash
+# Render Dashboard Configuration:
+Disk Name: kanban-data
+Mount Path: /var/data
+Size: 1 GB
+```
 
 ## 🔧 Environment Variables
 

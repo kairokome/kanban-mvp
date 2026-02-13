@@ -76,9 +76,22 @@ function getAgentIdentity(req) {
 }
 
 // Database setup
+const dbPathDir = require('path').dirname(DB_PATH);
+
+// Ensure database directory exists
+if (!fs.existsSync(dbPathDir)) {
+    fs.mkdirSync(dbPathDir, { recursive: true });
+    console.log(`📁 Created database directory: ${dbPathDir}`);
+}
+
+console.log(`📁 Database path: ${DB_PATH}`);
+
 const db = new sqlite3.Database(DB_PATH, (err) => {
-    if (err) console.error('DB error:', err);
-    else console.log('Connected to SQLite:', DB_PATH);
+    if (err) {
+        console.error(`❌ Failed to open database: ${err.message}`);
+        process.exit(1);
+    }
+    console.log('✅ Connected to SQLite database');
 });
 
 // Initialize tables with migrations for new columns
