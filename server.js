@@ -30,7 +30,12 @@ console.log('🤖 Agent API: ENABLED');
 
 // ============ Database Layer Abstraction ============
 const DATABASE_URL = process.env.DATABASE_URL;
-const DB_PATH = process.env.DB_PATH || './kanban.db';
+// Only use DB_PATH if DATABASE_URL is NOT set
+const DB_PATH = !DATABASE_URL ? process.env.DB_PATH || './kanban.db' : null;
+
+console.log('🔍 Database config check:');
+console.log(`   DATABASE_URL: ${DATABASE_URL ? 'SET' : 'NOT SET'}`);
+console.log(`   DB_PATH: ${DB_PATH || 'N/A (PostgreSQL mode)'}`);
 
 let db;
 let isPostgres = false;
@@ -68,7 +73,7 @@ class PostgresWrapper {
 // Initialize database connection
 async function initDatabase() {
     if (DATABASE_URL) {
-        console.log('📦 Using PostgreSQL (DATABASE_URL set)');
+        console.log('📦 Connecting to PostgreSQL...');
         const client = new Client({ connectionString: DATABASE_URL });
         await client.connect();
         console.log('✅ Connected to PostgreSQL');
@@ -78,7 +83,7 @@ async function initDatabase() {
         // Run migrations
         await runMigrations();
     } else {
-        console.log(`📦 Using SQLite (${DB_PATH})`);
+        console.log(`📦 Connecting to SQLite (${DB_PATH})...`);
         const dbPathDir = path.dirname(DB_PATH);
         if (!fs.existsSync(dbPathDir)) {
             fs.mkdirSync(dbPathDir, { recursive: true });
@@ -88,7 +93,7 @@ async function initDatabase() {
         db = await new Promise((resolve, reject) => {
             const sqliteDb = new sqlite3.Database(DB_PATH, (err) => {
                 if (err) {
-                    console.error(`❌ Failed to open database: ${err.message}`);
+                    console.error(`❌ Failed to open SQLite database: ${err.message}`);
                     process.exit(1);
                 }
                 console.log('✅ Connected to SQLite database');
