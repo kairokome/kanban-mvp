@@ -417,7 +417,68 @@ app.post('/api/cards/:id/comment', agentAuthMiddleware, (req, res) => {
     });
 });
 
-// POST /api/cards/:id/transition - Move task with role validation (Agent API)
+// POST /api/cards/:id/claim - Atomic claim task (first-claim-wins)
+app.post('/api/cards/:id/claim', agentAuthMiddleware, (req, res) => {
+    const taskId = req.params.id;
+    const agentInfo = getAgentIdentity(req);
+
+    // Use transaction for atomic claim
+    db.serialize(() => {
+        db.run('BEGIN IMMEDIATE'); // Start exclusive transaction for atomicity
+
+        db.get('SELECT * FROM tasks WHERE id = ? FOR UPDATE', [taskId], (err, task) => {
+            if (err || !task) {
+                db.run('ROLLBACK');
+                return res.status(404).json({ error: 'Task not found' });
+            }
+
+            // Validate claim action
+            const claimValidation = validateClaimAction(task, agentInfo);
+            if (!claimValidation.allowed) {
+                db.run('ROLLBACK');
+                logActivity('claim_denied', taskId, task.title,
+                    `Claim attempt by ${agentInfo.agentId} denied: ${claimValidation.reason}`,
+                    agentInfo);
+                return res.status(409).json({
+                    error: 'Claim denied',
+                    reason: claimValidation.reason,
+                    current_owner: task.owner_agent
+                });
+            }
+
+            // Perform the claim atomically
+            db.run(
+                'UPDATE tasks SET owner_agent = ?, updated_at = datetime("now") WHERE id = ?',
+                [agentInfo.agentId, taskId],
+                function(err) {
+                    if (err) {
+                        db.run('ROLLBACK');
+                        return res.status(500).json({ error: err.message });
+                    }
+
+                    db.run('COMMIT', (commitErr) => {
+                        if (commitErr) {
+                            return res.status(500).json({ error: 'Failed to commit transaction' });
+                        }
+
+                        logActivity('claim', taskId, task.title,
+                            `Task claimed by ${agentInfo.agentId}`,
+                            agentInfo);
+
+                        res.json({
+                            id: taskId,
+                            owner_agent: agentInfo.agentId,
+                            status: task.status,
+                            message: 'Task claimed successfully'
+                        });
+                    });
+                }
+            );
+        });
+    });
+});
+
+// POST /api/cards/:id/transition - Atomic status transition (Agent API)
 app.post('/api/cards/:id/transition', agentAuthMiddleware, (req, res) => {
     const taskId = req.params.id;
     const { status: newStatus } = req.body;
@@ -427,50 +488,67 @@ app.post('/api/cards/:id/transition', agentAuthMiddleware, (req, res) => {
         return res.status(400).json({ error: 'New status is required' });
     }
 
-    db.get('SELECT * FROM tasks WHERE id = ?', [taskId], (err, task) => {
-        if (err) return res.status(500).json({ error: err.message });
-        if (!task) return res.status(404).json({ error: 'Task not found' });
+    // Use transaction for atomic transition
+    db.serialize(() => {
+        db.run('BEGIN IMMEDIATE');
 
-        // Validate transition with safety gates
-        const validation = validateTransition(task, newStatus, agentInfo);
+        db.get('SELECT * FROM tasks WHERE id = ? FOR UPDATE', [taskId], (err, task) => {
+            if (err || !task) {
+                db.run('ROLLBACK');
+                return res.status(404).json({ error: 'Task not found' });
+            }
 
-        if (!validation.allowed) {
-            // Log the denied transition attempt
-            logTransitionAttempt(
-                taskId, task.title, task.status, newStatus,
-                agentInfo, false, validation.reason,
-                task.branch, task.repo
-            );
-            return res.status(403).json({
-                error: 'Transition denied',
-                reason: validation.reason,
-                from_status: task.status,
-                to_status: newStatus
-            });
-        }
+            // Validate transition with safety gates
+            const validation = validateTransition(task, newStatus, agentInfo);
 
-        // Perform the transition
-        db.run(
-            'UPDATE tasks SET status = ?, updated_at = datetime("now") WHERE id = ?',
-            [newStatus, taskId],
-            function(err) {
-                if (err) return res.status(500).json({ error: err.message });
-
-                // Log successful transition
+            if (!validation.allowed) {
+                db.run('ROLLBACK');
+                // Log the denied transition attempt
                 logTransitionAttempt(
                     taskId, task.title, task.status, newStatus,
-                    agentInfo, true, null,
+                    agentInfo, false, validation.reason,
                     task.branch, task.repo
                 );
-
-                res.json({
-                    id: taskId,
+                return res.status(403).json({
+                    error: 'Transition denied',
+                    reason: validation.reason,
                     from_status: task.status,
-                    to_status: newStatus,
-                    message: 'Task transitioned successfully'
+                    to_status: newStatus
                 });
             }
-        );
+
+            // Perform the transition atomically
+            db.run(
+                'UPDATE tasks SET status = ?, updated_at = datetime("now") WHERE id = ?',
+                [newStatus, taskId],
+                function(err) {
+                    if (err) {
+                        db.run('ROLLBACK');
+                        return res.status(500).json({ error: err.message });
+                    }
+
+                    db.run('COMMIT', (commitErr) => {
+                        if (commitErr) {
+                            return res.status(500).json({ error: 'Failed to commit transaction' });
+                        }
+
+                        // Log successful transition
+                        logTransitionAttempt(
+                            taskId, task.title, task.status, newStatus,
+                            agentInfo, true, null,
+                            task.branch, task.repo
+                        );
+
+                        res.json({
+                            id: taskId,
+                            from_status: task.status,
+                            to_status: newStatus,
+                            message: 'Task transitioned successfully'
+                        });
+                    });
+                }
+            );
+        });
     });
 });
 

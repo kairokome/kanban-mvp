@@ -1,6 +1,6 @@
 {
   "name": "kanban-mvp",
-  "version": "1.1.12",
+  "version": "1.1.13",
   "description": "Self-hosted Kanban board with SQLite persistence",
   "main": "server.js",
   "bin": {
