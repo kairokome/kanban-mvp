@@ -32,6 +32,9 @@ const PORT = process.env.PORT || 3000;
 const DB_PATH = process.env.DB_PATH || './kanban.db';
 const OWNER_PASSWORD = process.env.OWNER_PASSWORD;
 
+// Debug: Log that OWNER_PASSWORD is defined (not the value)
+console.log('🔐 Owner password:', OWNER_PASSWORD ? 'DEFINED (length: ' + OWNER_PASSWORD.length + ')' : 'NOT DEFINED');
+
 // Middleware
 app.use(express.json());
 app.use(express.static('public'));
@@ -804,6 +807,18 @@ app.get('/health', (req, res) => res.json({
     timestamp: new Date().toISOString(),
     uptime: process.uptime()
 }));
+
+// Auth debug endpoint (for troubleshooting - safe to expose)
+app.get('/auth-debug', (req, res) => {
+    const headerPw = req.headers['x-owner-password'];
+    res.json({
+        headerProvided: !!headerPw,
+        headerLength: headerPw ? headerPw.length : 0,
+        envDefined: !!OWNER_PASSWORD,
+        envLength: OWNER_PASSWORD ? OWNER_PASSWORD.length : 0,
+        match: headerPw === OWNER_PASSWORD
+    });
+});
 
 // Start server
 app.listen(PORT, () => {
