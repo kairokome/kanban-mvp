@@ -442,7 +442,7 @@ app.post('/api/cards/:id/claim', agentAuthMiddleware, (req, res) => {
     db.serialize(() => {
         db.run('BEGIN IMMEDIATE'); // Start exclusive transaction for atomicity
 
-        db.get('SELECT * FROM tasks WHERE id = ? FOR UPDATE', [taskId], (err, task) => {
+        db.get('SELECT * FROM tasks WHERE id = ?', [taskId], (err, task) => {
             if (err || !task) {
                 db.run('ROLLBACK');
                 return res.status(404).json({ error: 'Task not found' });
@@ -508,7 +508,7 @@ app.post('/api/cards/:id/transition', agentAuthMiddleware, (req, res) => {
     db.serialize(() => {
         db.run('BEGIN IMMEDIATE');
 
-        db.get('SELECT * FROM tasks WHERE id = ? FOR UPDATE', [taskId], (err, task) => {
+        db.get('SELECT * FROM tasks WHERE id = ?', [taskId], (err, task) => {
             if (err || !task) {
                 db.run('ROLLBACK');
                 return res.status(404).json({ error: 'Task not found' });
