@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.1.14] - 2026-02-13
+
+### Added
+- **Autonomous Agent Behavior** (`agent-behavior.js`): Self-managing agent that maintains backlog health and processes cards through workflow
+- **Backlog Maintenance**: Agent automatically generates new ideas to keep backlog at 10 cards
+- **Card Processing Automation**: Agent claims unclaimed "To Do" cards, moves to Ongoing, adds progress comments, and advances to Review
+- **Configurable Interval**: Agent loop runs every 30 seconds (configurable via `BEHAVIOR_INTERVAL_MS` env var)
+
+### Behavior Rules
+- Maintain Backlog <= 10 cards (generates new ideas if below threshold)
+- Only pick unclaimed cards from "To Do" column
+- Claim → move to Ongoing → comment progress
+- When finished, move to Review
+- Never move Review → Done (Founder-only transition)
+
+### Configuration
+- `AGENT_API_KEY` (required): API key for authentication
+- `BEHAVIOR_INTERVAL_MS` (optional): Loop interval in ms (default: 30000)
+- `KANBAN_BASE_URL` (optional): API base URL (default: http://localhost:3000)
+- `AGENT_ID` (optional): Agent identifier (default: auto-agent)
+
 ## [1.1.13] - 2026-02-12
 
 ### Added
